@@ -12,14 +12,23 @@ use submission::Entity as Submission;
 pub struct Database(pub DatabaseConnection);
 
 impl Database {
-    pub async fn add_submission(&self, submission: submission::Model) -> Result<(), anyhow::Error> {
+    pub async fn add_submission(
+        &self,
+        submission: submission::Model,
+    ) -> Result<i32, anyhow::Error> {
+        log::info!(
+            "Add submission from {}, valid = {}",
+            submission.id,
+            submission.valid
+        );
+
         let mut am = submission.into_active_model();
 
         am.id = ActiveValue::NotSet;
 
-        Submission::insert(am).exec(&self.0).await?;
+        let id = Submission::insert(am).exec(&self.0).await?.last_insert_id;
 
-        Ok(())
+        Ok(id)
     }
 
     pub async fn get_active_submissions(&self) -> Result<Vec<submission::Model>, anyhow::Error> {

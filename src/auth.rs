@@ -31,7 +31,6 @@ pub struct OpenIdConnectMiddleware {
     login_path: String,
     callback_path: String,
     login_landing_path: String,
-    redirect_url: RedirectUrl,
     client: CoreClient,
 }
 
@@ -124,7 +123,6 @@ impl OpenIdConnectMiddleware {
             login_path: "/login".to_string(),
             callback_path: "/callback".to_string(),
             login_landing_path: "/".to_string(),
-            redirect_url: config.redirect_url.clone(),
             client,
         }
     }
@@ -208,6 +206,7 @@ impl OpenIdConnectMiddleware {
                     "Could not strip off the email domain",
                 )
             })?;
+            let id = id.replace('.', "_"); // I hope nobody gets the same id =)
 
             // Add the user id to the session state in order to mark this
             // session as authenticated.
@@ -267,10 +266,8 @@ where
             // process), then augment the request with the authentication
             // status.
             match req.session().get(SESSION_KEY) {
-                Some(MiddlewareSessionState::PostAuth(subject)) => {
-                    req.set_ext(OpenIdConnectRequestExtData::Authenticated {
-                        user_id: subject.to_string(),
-                    })
+                Some(MiddlewareSessionState::PostAuth(user_id)) => {
+                    req.set_ext(OpenIdConnectRequestExtData::Authenticated { user_id })
                 }
                 _ => req.set_ext(OpenIdConnectRequestExtData::Unauthenticated {}),
             };

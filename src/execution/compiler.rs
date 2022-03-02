@@ -1,5 +1,5 @@
-use crate::docker_util::run_container;
 use crate::error::Error::CompilationError;
+use crate::execution::docker_util::run_container;
 use futures_util::stream::StreamExt;
 use shiplift::{ContainerOptions, Docker, PullOptions};
 use std::error;
@@ -7,23 +7,25 @@ use std::path::Path;
 use std::time::Duration;
 use tempfile::{tempdir, TempDir};
 
-pub struct JavaCompiler<'docker> {
-    docker: &'docker Docker,
+pub struct JavaCompiler {
+    docker: Docker,
     image_name: String,
 }
 
 const IMAGE_NAME: &str = "openjdk:8-alpine";
 const TIMEOUT: Duration = Duration::from_secs(5);
 
-impl<'docker> JavaCompiler<'docker> {
-    pub async fn new(docker: &'docker Docker) -> Result<JavaCompiler<'docker>, anyhow::Error> {
+impl JavaCompiler {
+    pub async fn new(docker: Docker) -> Result<JavaCompiler, anyhow::Error> {
         log::info!("Gonna pull image {IMAGE_NAME}");
-        let mut stream = docker
-            .images()
-            .pull(&PullOptions::builder().image(IMAGE_NAME).build());
+        {
+            let mut stream = docker
+                .images()
+                .pull(&PullOptions::builder().image(IMAGE_NAME).build());
 
-        while let Some(pull_result) = stream.next().await {
-            log::debug!("Pull message: {}", pull_result?);
+            while let Some(pull_result) = stream.next().await {
+                log::debug!("Pull message: {}", pull_result?);
+            }
         }
 
         Ok(Self {
@@ -77,7 +79,7 @@ impl<'docker> JavaCompiler<'docker> {
             // .attach_stdout(true)
             .build();
 
-        let (exit, _, err) = run_container(self.docker, &container, TIMEOUT).await?;
+        let (exit, _, err) = run_container(&self.docker, &container, TIMEOUT).await?;
 
         if exit.status_code != 0 {
             return Err(CompilationError(err).into());

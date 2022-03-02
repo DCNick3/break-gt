@@ -57,6 +57,9 @@ public class Fixture {
                         constructor = clazz.getConstructor();
                     } catch (NoSuchMethodException e) {
                         System.err.println("Cannot find constructor for player class " + clazz);
+                        System.err.println("Does your class has constructor?");
+                        System.err.println("Is it public?");
+                        System.err.println("Is the class itself public?");
                         throw new RuntimeException(e);
                     }
 
@@ -101,11 +104,9 @@ public class Fixture {
             Future<?> fut = executor.submit(() -> this.player.move(opponentLastMove, x[0], x[1], x[2]));
             int res = -1;
             try {
-                int res1 = (Integer) fut.get(100, TimeUnit.MILLISECONDS);
-                if (res1 < 1 || res1 > 3) {
+                res = (Integer) fut.get(100, TimeUnit.MILLISECONDS);
+                if (res < 1 || res > 3) {
                     mc.error = "move out of bounds";
-                } else {
-                    res = res1;
                 }
             } catch (TimeoutException ex) {
                 mc.error = "timeout while executing move()";

@@ -1,5 +1,5 @@
-use crate::compiler::CompiledJavaProgram;
-use crate::docker_util::run_container;
+use crate::execution::compiler::CompiledJavaProgram;
+use crate::execution::docker_util::run_container;
 use futures_util::stream::StreamExt;
 use shiplift::rep::Exit;
 use shiplift::{ContainerOptions, Docker, PullOptions};
@@ -9,20 +9,22 @@ use std::time::Duration;
 const IMAGE_NAME: &str = "openjdk:8-alpine";
 const TIMEOUT: Duration = Duration::from_secs(1);
 
-pub struct Runner<'docker> {
-    docker: &'docker Docker,
+pub struct Runner {
+    docker: Docker,
     image_name: String,
 }
 
-impl<'docker> Runner<'docker> {
-    pub async fn new(docker: &'docker Docker) -> Result<Runner<'docker>, Box<dyn Error>> {
+impl Runner {
+    pub async fn new(docker: Docker) -> Result<Self, Box<dyn Error>> {
         log::info!("Gonna pull image {IMAGE_NAME}");
-        let mut stream = docker
-            .images()
-            .pull(&PullOptions::builder().image(IMAGE_NAME).build());
+        {
+            let mut stream = docker
+                .images()
+                .pull(&PullOptions::builder().image(IMAGE_NAME).build());
 
-        while let Some(pull_result) = stream.next().await {
-            log::debug!("Pull message: {}", pull_result?);
+            while let Some(pull_result) = stream.next().await {
+                log::debug!("Pull message: {}", pull_result?);
+            }
         }
 
         Ok(Self {
@@ -35,7 +37,7 @@ impl<'docker> Runner<'docker> {
         &self,
         program: &CompiledJavaProgram,
         main_class: &str,
-    ) -> Result<(Exit, String, String), Box<dyn Error>> {
+    ) -> Result<(Exit, String, String), anyhow::Error> {
         log::info!(
             "Running java program {:?} with class {}",
             program.path(),
@@ -51,6 +53,6 @@ impl<'docker> Runner<'docker> {
             .cmd(cmd)
             .build();
 
-        Ok(run_container(self.docker, &container, TIMEOUT).await?)
+        Ok(run_container(&self.docker, &container, TIMEOUT).await?)
     }
 }

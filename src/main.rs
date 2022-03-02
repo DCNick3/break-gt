@@ -1,35 +1,42 @@
 use crate::auth::{OpenIdConnectRequestExt, OpenIdConnectRouteExt};
-use crate::compiler::{JavaCompiler, JavaProgram};
 use crate::database::Database;
-use crate::matchmaker::{match_with_dummy_strats, run_matched_program};
-use crate::runner::Runner;
-use entity::sea_orm::prelude::DateTimeUtc;
-use entity::sea_orm::DatabaseConnection;
-use entity::submission;
+use crate::execution::compiler::JavaCompiler;
+use crate::execution::runner::Runner;
+use crate::execution::ExecutionState;
+use regex::internal::Compiler;
+use shiplift::Docker;
 use std::env;
-use std::time::SystemTime;
-use tide::prelude::*;
-use tide::StatusCode;
+use std::sync::Arc;
+use tide::{Response, StatusCode};
 use tide_rustls::TlsListener;
 
+mod api;
 mod auth;
-mod compiler;
 mod database;
-mod docker_util;
 mod error;
-mod matchmaker;
-mod runner;
+mod execution;
 
 #[derive(Clone)]
-struct State {
+pub struct State {
     db: Database,
+    execution: Arc<ExecutionState>,
 }
 
-const UPLOAD_LIMIT: usize = 1024 * 1024;
+// pub fn result_to_response<T: Into<Response>>(
+//     r: Result<T, anyhow::Error>,
+// ) -> Result<Response, tide::Error> {
+//     match r {
+//         Ok(r) => Ok(r.into()),
+//         Err(r) => match r.downcast::<tide::Error>() {
+//             Ok(e) => Err(e),
+//             Err(e) => Err(tide::Error::new(StatusCode::InternalServerError, e)),
+//         },
+//     }
+// }
 
 #[async_std::main]
 async fn main() -> tide::Result<()> {
-    tracing_subscriber::fmt::init();
+    tide::log::with_level(tide::log::LevelFilter::Debug);
 
     dotenv::dotenv().ok();
     let db_url = env::var("DATABASE_URL").expect("DATABASE_URL is not set in .env file");
@@ -40,7 +47,15 @@ async fn main() -> tide::Result<()> {
 
     let db = entity::sea_orm::Database::connect(db_url).await.unwrap();
 
-    let mut app = tide::with_state(State { db: Database(db) });
+    let docker = Docker::new();
+
+    let mut app = tide::with_state(State {
+        db: Database(db),
+        execution: Arc::new(ExecutionState {
+            runner: Runner::new(docker.clone()).await.unwrap(),
+            compiler: JavaCompiler::new(docker).await.unwrap(),
+        }),
+    });
 
     app.with(
         tide::sessions::SessionMiddleware::new(
@@ -73,30 +88,15 @@ async fn main() -> tide::Result<()> {
         let state = req.state();
 
         Ok(format!(
-            "Dicks\nWe have {} active strategies",
+            "Hello, {}\nWe have {} active strategies",
+            req.user_id().unwrap_or_else(|| "anon".to_string()),
             state.db.get_active_submissions().await?.len()
         ))
     });
 
     app.at("/submit")
         .authenticated()
-        .post(|mut req: tide::Request<State>| async move {
-            let state = req.state();
-
-            let user_id = req.user_id().unwrap();
-
-            log::info!("{user_id} uploads something");
-
-            let body = req.body_string().await?;
-            if body.len() > UPLOAD_LIMIT {
-                return Err(tide::http::Error::from_str(
-                    StatusCode::PayloadTooLarge,
-                    "Upload is too large",
-                ));
-            }
-
-            Ok(format!("What are you doing here?"))
-        });
+        .post(|mut req: tide::Request<State>| async move { api::submissions::submit(req).await });
 
     app.listen(
         TlsListener::build()
