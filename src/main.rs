@@ -3,15 +3,16 @@ use crate::database::Database;
 use crate::execution::compiler::JavaCompiler;
 use crate::execution::runner::Runner;
 use crate::execution::ExecutionState;
-use regex::internal::Compiler;
+
 use shiplift::Docker;
 use std::env;
 use std::sync::Arc;
-use tide::{Response, StatusCode};
+use tide::security::CorsMiddleware;
 use tide_rustls::TlsListener;
 
 mod api;
 mod auth;
+mod background_round_executor;
 mod database;
 mod error;
 mod execution;
@@ -58,6 +59,12 @@ async fn main() -> tide::Result<()> {
     });
 
     app.with(
+        CorsMiddleware::new()
+            .allow_credentials(true)
+            .allow_origin("http://localhost:8080"),
+    );
+
+    app.with(
         tide::sessions::SessionMiddleware::new(
             tide::sessions::CookieStore::new(),
             cookie_secret.as_bytes(),
@@ -76,7 +83,7 @@ async fn main() -> tide::Result<()> {
                 "ad288b08-3b91-4c4b-b0bd-30d249e26fdb".to_string(),
             ),
             redirect_url: openidconnect::RedirectUrl::new(
-                "https://redirect.baam.duckdns.org/?redirect=https://localhost:8081/callback"
+                "https://redirect.baam.duckdns.org/?redirect=https://2a0c7e13d4a82a.lhrtunnel.link/callback"
                     .to_string(),
             )
             .unwrap(),
@@ -96,17 +103,28 @@ async fn main() -> tide::Result<()> {
 
     app.at("/submit")
         .authenticated()
-        .post(|mut req: tide::Request<State>| async move { api::submissions::submit(req).await });
+        .post(|req: tide::Request<State>| async move { api::submissions::submit(req).await });
 
-    app.listen(
-        TlsListener::build()
-            .addrs(server_url)
-            .cert(std::env::var("TIDE_CERT_PATH").unwrap())
-            .key(std::env::var("TIDE_KEY_PATH").unwrap()),
-    )
-    .await?;
+    app.at("/scoreboard")
+        .get(|req: tide::Request<State>| async move { api::rounds::get_scoreboard(req).await });
 
-    //app.listen().await?;
+    let state = app.state().clone();
+
+    async_std::task::spawn(async move {
+        background_round_executor::background_round_executor(&state)
+            .await
+            .unwrap()
+    });
+
+    // app.listen(
+    //     TlsListener::build()
+    //         .addrs(server_url)
+    //         .cert(std::env::var("TIDE_CERT_PATH").unwrap())
+    //         .key(std::env::var("TIDE_KEY_PATH").unwrap()),
+    // )
+    // .await?;
+
+    app.listen(server_url).await?;
 
     Ok(())
 

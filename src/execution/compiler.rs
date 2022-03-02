@@ -2,7 +2,6 @@ use crate::error::Error::CompilationError;
 use crate::execution::docker_util::run_container;
 use futures_util::stream::StreamExt;
 use shiplift::{ContainerOptions, Docker, PullOptions};
-use std::error;
 use std::path::Path;
 use std::time::Duration;
 use tempfile::{tempdir, TempDir};

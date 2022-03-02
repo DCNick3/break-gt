@@ -4,8 +4,8 @@ use isahc::config::{Configurable, RedirectPolicy};
 use once_cell::sync::Lazy;
 use openidconnect::core::{CoreClient, CoreIdToken, CoreProviderMetadata, CoreResponseType};
 use openidconnect::{
-    AuthenticationFlow, ClientId, CsrfToken, HttpRequest, HttpResponse, IdToken, IssuerUrl, Nonce,
-    RedirectUrl, Scope, SubjectIdentifier,
+    AuthenticationFlow, ClientId, CsrfToken, HttpRequest, HttpResponse, IssuerUrl, Nonce,
+    RedirectUrl,
 };
 use serde::{Deserialize, Serialize};
 use tide::http::Method;

@@ -1,15 +1,12 @@
-use crate::execution::matchmaker::{
-    match_with_dummy_strats, run_matched_program, MatchResult, PlayerResult, RoundResult,
-};
+use crate::execution::matchmaker::{match_with_dummy_strats, run_matched_program, PlayerResult};
 use crate::{ExecutionState, OpenIdConnectRequestExt, State};
-use anyhow::Error;
 use entity::sea_orm::prelude::DateTimeUtc;
 use entity::submission;
 use std::fmt::Write;
 use std::sync::Arc;
 use std::time::SystemTime;
 use tide::log::info;
-use tide::{Request, StatusCode};
+use tide::{Body, Request, StatusCode};
 
 const UPLOAD_LIMIT: usize = 1024 * 1024;
 
@@ -98,7 +95,7 @@ async fn validate_code(
     Ok((true, "You pass!".to_string(), Some(player_match_results)))
 }
 
-pub async fn submit(mut req: Request<State>) -> Result<String, tide::Error> {
+pub async fn submit(mut req: Request<State>) -> tide::Result<Body> {
     let execution_state = req.state().execution.clone();
 
     let user_id = req.user_id().unwrap();
@@ -126,5 +123,5 @@ pub async fn submit(mut req: Request<State>) -> Result<String, tide::Error> {
         })
         .await?;
 
-    Ok(serde_json::to_string(&val_res)?)
+    Ok(Body::from_json(&val_res)?)
 }

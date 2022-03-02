@@ -3,7 +3,6 @@ use futures_util::stream::StreamExt;
 use shiplift::rep::Exit;
 use shiplift::tty::TtyChunk;
 use shiplift::{Container, ContainerOptions, Docker, LogsOptions, RmContainerOptions};
-use std::error;
 use std::time::Duration;
 
 async fn start_and_wait_container(

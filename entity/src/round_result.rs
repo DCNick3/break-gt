@@ -9,6 +9,8 @@ pub struct Model {
     pub id: i32,
     #[sea_orm(column_type = "Text")]
     pub result: String,
+    #[sea_orm(column_type = "Text")]
+    pub participants: String,
     pub datetime: DateTimeUtc,
 }
 

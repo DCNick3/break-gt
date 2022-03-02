@@ -85,6 +85,11 @@ impl MigrationTrait for Migration {
                             .not_null(),
                     )
                     .col(
+                        ColumnDef::new(round_result::Column::Participants)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(
                         ColumnDef::new(round_result::Column::Datetime)
                             .timestamp()
                             .not_null(),

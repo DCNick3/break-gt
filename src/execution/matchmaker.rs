@@ -1,6 +1,5 @@
 use crate::error::Error::FixtureFailure;
-use crate::execution::compiler::{JavaCompiler, JavaProgram};
-use crate::execution::runner::Runner;
+use crate::execution::compiler::JavaProgram;
 use crate::ExecutionState;
 use lazy_static::lazy_static;
 use regex::Regex;

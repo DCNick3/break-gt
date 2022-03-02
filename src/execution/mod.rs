@@ -1,6 +1,5 @@
 use crate::execution::compiler::JavaCompiler;
 use crate::execution::runner::Runner;
-use shiplift::Docker;
 
 pub mod compiler;
 pub mod docker_util;

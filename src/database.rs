@@ -1,21 +1,24 @@
-use entity::sea_orm::sea_query::{Alias, Expr, Function, SelectStatement, SimpleExpr};
+use anyhow::anyhow;
+use entity::sea_orm::sea_query::{Alias, Expr, Function, SimpleExpr};
 use entity::sea_orm::{
-    ActiveValue, ColumnTrait, Condition, DatabaseConnection, DbBackend, EntityTrait,
-    IntoActiveModel, IntoSimpleExpr, JoinType, QueryFilter, QuerySelect, QueryTrait,
+    ActiveValue, ColumnTrait, Condition, DatabaseConnection, EntityTrait, IntoActiveModel,
+    IntoSimpleExpr, JoinType, QueryFilter, QueryOrder, QuerySelect,
 };
-use std::error;
+use std::collections::BTreeMap;
+use std::time::SystemTime;
 
-use entity::submission;
+use crate::execution::matchmaker::RoundResult;
+use entity::sea_orm::prelude::DateTimeUtc;
+use entity::{round_result, submission};
 use submission::Entity as Submission;
 
 #[derive(Clone)]
 pub struct Database(pub DatabaseConnection);
 
+impl Database {}
+
 impl Database {
-    pub async fn add_submission(
-        &self,
-        submission: submission::Model,
-    ) -> Result<i32, anyhow::Error> {
+    pub async fn add_submission(&self, submission: submission::Model) -> anyhow::Result<i32> {
         log::info!(
             "Add submission from {}, valid = {}",
             submission.id,
@@ -66,5 +69,48 @@ impl Database {
         );
 
         Ok(q.all(&self.0).await?)
+    }
+
+    pub async fn add_round_result(
+        &self,
+        round_result: &RoundResult,
+        player_strategies: BTreeMap<String, i32>,
+    ) -> anyhow::Result<i32> {
+        let rr = round_result::Model {
+            id: 0,
+            result: serde_json::to_string(round_result)?,
+            participants: serde_json::to_string(&player_strategies)?,
+            datetime: DateTimeUtc::from(SystemTime::now()),
+        };
+
+        let mut am = rr.into_active_model();
+        am.id = ActiveValue::NotSet;
+
+        let id = round_result::Entity::insert(am)
+            .exec(&self.0)
+            .await?
+            .last_insert_id;
+
+        Ok(id)
+    }
+
+    pub async fn get_last_rounds_result(&self) -> anyhow::Result<(Vec<RoundResult>, DateTimeUtc)> {
+        let r = round_result::Entity::find()
+            .order_by_desc(round_result::Column::Datetime)
+            .limit(5)
+            .all(&self.0)
+            .await?;
+
+        if r.is_empty() {
+            return Err(anyhow!("No round results available"));
+        }
+
+        let last_time = r.iter().map(|f| f.datetime).max().unwrap();
+
+        let round_results: serde_json::Result<Vec<RoundResult>> =
+            r.iter().map(|f| serde_json::from_str(&f.result)).collect();
+        let round_results = round_results?;
+
+        Ok((round_results, last_time))
     }
 }
