@@ -4,7 +4,7 @@ use std::{error, fmt};
 pub enum Error {
     CompilationError(String),
     ExecutionTimeout,
-    FixtureFailure(u64, String, String, Option<Box<dyn error::Error>>),
+    FixtureFailure(u64, String, String, Option<anyhow::Error>),
 }
 
 impl fmt::Display for Error {

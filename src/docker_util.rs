@@ -9,7 +9,7 @@ use std::time::Duration;
 async fn start_and_wait_container(
     container: Container<'_>,
     timeout: Duration,
-) -> Result<(Exit, String, String), Box<dyn error::Error>> {
+) -> Result<(Exit, String, String), anyhow::Error> {
     log::trace!(
         "Starting container {} and waiting for its completion",
         container.id()
@@ -17,11 +17,11 @@ async fn start_and_wait_container(
 
     container.start().await?;
 
-    let res = tokio::time::timeout(timeout, container.wait()).await;
+    let res = async_std::future::timeout(timeout, container.wait()).await;
 
     let res = match res {
         Ok(r) => r,
-        Err(_) => return Err(Box::new(ExecutionTimeout)),
+        Err(_) => return Err(ExecutionTimeout.into()),
     };
 
     let res = res?;
@@ -49,7 +49,7 @@ pub async fn run_container(
     docker: &Docker,
     container_options: &ContainerOptions,
     timeout: Duration,
-) -> Result<(Exit, String, String), Box<dyn error::Error>> {
+) -> Result<(Exit, String, String), anyhow::Error> {
     let container = docker.containers().create(container_options).await?;
 
     let wait_res =

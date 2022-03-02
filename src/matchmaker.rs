@@ -25,9 +25,7 @@ fn patch_package(code: &str, package_name: &str) -> String {
         .to_string()
 }
 
-pub fn make_match_program(
-    players: &HashMap<String, String>,
-) -> Result<JavaProgram, Box<dyn error::Error>> {
+pub fn make_match_program(players: &HashMap<String, String>) -> Result<JavaProgram, anyhow::Error> {
     let mut program = JavaProgram::new();
     // the code that does the match-making and stuff
     program.push_class(
@@ -52,10 +50,7 @@ pub fn make_match_program(
     Ok(program)
 }
 
-pub fn match_with_dummy_strats(
-    id: String,
-    code: String,
-) -> Result<JavaProgram, Box<dyn error::Error>> {
+pub fn match_with_dummy_strats(id: String, code: String) -> Result<JavaProgram, anyhow::Error> {
     make_match_program(&HashMap::from([
         (id, code),
         (
@@ -134,7 +129,7 @@ mod raw_json {
     }
 }
 
-fn parse_round_result(val: &str) -> Result<RoundResult, Box<dyn error::Error>> {
+fn parse_round_result(val: &str) -> Result<RoundResult, anyhow::Error> {
     let raw: raw_json::RoundResult = serde_json::from_str(val)?;
 
     let player_id_regex: &Regex = &PLAYER_ID_REGEX;
@@ -170,7 +165,7 @@ pub async fn run_matched_program<'docker>(
     compiler: &JavaCompiler<'docker>,
     runner: &Runner<'docker>,
     program: &JavaProgram,
-) -> Result<RoundResult, Box<dyn error::Error>> {
+) -> Result<RoundResult, anyhow::Error> {
     let program = compiler.compile(program).await.unwrap();
 
     println!("Compiled {program:?}");
@@ -181,12 +176,12 @@ pub async fn run_matched_program<'docker>(
         .unwrap();
 
     if exit.status_code != 0 {
-        return Err(Box::new(FixtureFailure(exit.status_code, out, err, None)));
+        return Err(FixtureFailure(exit.status_code, out, err, None).into());
     }
 
     let last_line = out.lines().last();
     let last_line = match last_line {
-        None => return Err(Box::new(FixtureFailure(exit.status_code, out, err, None))),
+        None => return Err(FixtureFailure(exit.status_code, out, err, None).into()),
         Some(l) => l,
     };
 
@@ -194,14 +189,7 @@ pub async fn run_matched_program<'docker>(
 
     let parse = match parse {
         Ok(p) => p,
-        Err(e) => {
-            return Err(Box::new(FixtureFailure(
-                exit.status_code,
-                out,
-                err,
-                Some(e),
-            )))
-        }
+        Err(e) => return Err(FixtureFailure(exit.status_code, out, err, Some(e)).into()),
     };
 
     Ok(parse)

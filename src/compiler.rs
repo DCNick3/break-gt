@@ -16,9 +16,7 @@ const IMAGE_NAME: &str = "openjdk:8-alpine";
 const TIMEOUT: Duration = Duration::from_secs(5);
 
 impl<'docker> JavaCompiler<'docker> {
-    pub async fn new(
-        docker: &'docker Docker,
-    ) -> Result<JavaCompiler<'docker>, Box<dyn error::Error>> {
+    pub async fn new(docker: &'docker Docker) -> Result<JavaCompiler<'docker>, anyhow::Error> {
         log::info!("Gonna pull image {IMAGE_NAME}");
         let mut stream = docker
             .images()
@@ -37,7 +35,7 @@ impl<'docker> JavaCompiler<'docker> {
     pub async fn compile(
         &self,
         program: &JavaProgram,
-    ) -> Result<CompiledJavaProgram, Box<dyn error::Error>> {
+    ) -> Result<CompiledJavaProgram, anyhow::Error> {
         let dir = tempdir()?;
 
         log::trace!("Compiling java program in {dir:?}");
@@ -82,7 +80,7 @@ impl<'docker> JavaCompiler<'docker> {
         let (exit, _, err) = run_container(self.docker, &container, TIMEOUT).await?;
 
         if exit.status_code != 0 {
-            return Err(Box::new(CompilationError(err)));
+            return Err(CompilationError(err).into());
         }
 
         log::trace!("javac succeeded, removing source code");
