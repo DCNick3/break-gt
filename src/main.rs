@@ -1,3 +1,4 @@
+use crate::auth::{OpenIdConnectRequestExt, OpenIdConnectRouteExt};
 use crate::compiler::{JavaCompiler, JavaProgram};
 use crate::database::Database;
 use crate::matchmaker::{match_with_dummy_strats, run_matched_program};
@@ -8,6 +9,7 @@ use entity::submission;
 use std::env;
 use std::time::SystemTime;
 use tide::prelude::*;
+use tide::StatusCode;
 use tide_rustls::TlsListener;
 
 mod auth;
@@ -22,6 +24,8 @@ mod runner;
 struct State {
     db: Database,
 }
+
+const UPLOAD_LIMIT: usize = 1024 * 1024;
 
 #[async_std::main]
 async fn main() -> tide::Result<()> {
@@ -73,6 +77,26 @@ async fn main() -> tide::Result<()> {
             state.db.get_active_submissions().await?.len()
         ))
     });
+
+    app.at("/submit")
+        .authenticated()
+        .post(|mut req: tide::Request<State>| async move {
+            let state = req.state();
+
+            let user_id = req.user_id().unwrap();
+
+            log::info!("{user_id} uploads something");
+
+            let body = req.body_string().await?;
+            if body.len() > UPLOAD_LIMIT {
+                return Err(tide::http::Error::from_str(
+                    StatusCode::PayloadTooLarge,
+                    "Upload is too large",
+                ));
+            }
+
+            Ok(format!("What are you doing here?"))
+        });
 
     app.listen(
         TlsListener::build()
