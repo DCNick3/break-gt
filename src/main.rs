@@ -75,10 +75,10 @@ async fn main() -> tide::Result<()> {
 
     dotenv::dotenv().ok();
     let db_url = env::var("DATABASE_URL").expect("DATABASE_URL is not set in .env file");
-    let host = env::var("HOST").expect("HOST is not set in .env file");
-    let port = env::var("PORT").expect("PORT is not set in .env file");
     let cookie_secret = env::var("COOKIE_SECRET").expect("COOKIE_SECRET is not set in .env file");
-    let server_url = format!("{}:{}", host, port);
+
+    let listen_url = env::var("LISTEN_URL").expect("LISTEN_URL is not set in .env file");
+    let listen_url = Url::parse(&listen_url).expect("Couldn't parse the LISTEN_URL");
 
     let public_url = env::var("PUBLIC_URL").expect("PUBLIC_URL is not set in .env file");
     let public_url = Url::parse(&public_url).expect("Couldn't parse the PUBLIC_URL");
@@ -189,15 +189,32 @@ async fn main() -> tide::Result<()> {
             .unwrap()
     });
 
-    app.listen(
-        TlsListener::build()
-            .addrs(server_url)
-            .cert(std::env::var("TIDE_CERT_PATH").unwrap())
-            .key(std::env::var("TIDE_KEY_PATH").unwrap()),
-    )
-    .await?;
+    let listen_ep = format!(
+        "{}:{}",
+        listen_url.host().expect("LISTEN_URL missing hostname"),
+        listen_url
+            .port_or_known_default()
+            .expect("Could not determine the port from LISTEN_URL")
+    );
 
-    //app.listen(server_url).await?;
+    match listen_url.scheme() {
+        "https" => {
+            app.listen(
+                TlsListener::build()
+                    .addrs(listen_ep)
+                    .cert(
+                        std::env::var("TIDE_CERT_PATH")
+                            .expect("TIDE_CERT_PATH not set in .env file"),
+                    )
+                    .key(
+                        std::env::var("TIDE_KEY_PATH").expect("TIDE_KEY_PATH not set in .env file"),
+                    ),
+            )
+            .await?
+        }
+        "http" => app.listen(listen_ep).await?,
+        _ => unreachable!("Unsupported scheme in LISTEN_URL"),
+    }
 
     Ok(())
 
