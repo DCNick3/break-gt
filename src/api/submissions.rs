@@ -98,7 +98,7 @@ async fn validate_code(
 }
 
 #[instrument(skip(req))]
-pub async fn submit(mut req: Request<State>) -> tide::Result<Body> {
+pub async fn submit(mut req: Request<State>) -> tide::Result {
     let execution_state = req.state().execution.clone();
 
     let user_id = req.user_id().unwrap();
@@ -126,5 +126,13 @@ pub async fn submit(mut req: Request<State>) -> tide::Result<Body> {
         })
         .await?;
 
-    Ok(Body::from_json(&val_res)?)
+    let body = Body::from_json(&val_res)?;
+
+    Ok(tide::Response::builder(if val_res.0 {
+        StatusCode::Ok
+    } else {
+        StatusCode::PreconditionFailed
+    })
+    .body(body)
+    .build())
 }

@@ -29,6 +29,10 @@ pub struct PlayerMatches {
     pub round_time: DateTimeUtc,
 }
 
+fn round_score(score: f64) -> f64 {
+    (score * 1000.0).round() / 1000.0
+}
+
 #[instrument]
 pub async fn compute_scoreboard(db: &Database) -> anyhow::Result<Scoreboard> {
     let (rounds, time) = db.get_last_rounds_results().await?;
@@ -59,8 +63,9 @@ pub async fn compute_scoreboard(db: &Database) -> anyhow::Result<Scoreboard> {
     let res = Scoreboard {
         positions: mean_values
             .into_iter()
-            .map(|(name, mean)| (name, mean.mean()))
-            .sorted_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap())
+            .map(|(name, mean)| (name, round_score(mean.mean())))
+            // sort from top score to lower, then by name
+            .sorted_by(|(na, sa), (nb, sb)| sb.partial_cmp(sa).unwrap().then(na.cmp(nb)))
             .collect(),
         datetime: time,
     };
@@ -85,8 +90,8 @@ pub fn compute_matches(
         })
         .filter(|f| f.0.player_name == player_name)
         .map(|f| RedactedMatchResult {
-            opponent_result: f.1.outcome,
-            your_result: f.0.outcome,
+            opponent_result: f.1.outcome.map(round_score),
+            your_result: f.0.outcome.map(round_score),
             opponent_scoreboard_score: scoreboard
                 .positions
                 .iter()
@@ -95,6 +100,13 @@ pub fn compute_matches(
                 .unwrap()
                 .1,
             opponent_name: f.1.player_name,
+        })
+        .sorted_by(|a, b| {
+            // sort from top score to lower, then by name
+            b.opponent_scoreboard_score
+                .partial_cmp(&a.opponent_scoreboard_score)
+                .unwrap()
+                .then(a.opponent_name.cmp(&b.opponent_name))
         })
         .collect();
 
