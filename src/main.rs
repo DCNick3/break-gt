@@ -47,7 +47,8 @@ pub fn get_subscriber() -> impl Subscriber + Send + Sync {
 
     opentelemetry::global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());
     let jaeger_tracer = opentelemetry_jaeger::new_pipeline()
-        .with_collector_endpoint("http://localhost:14268/api/traces")
+        // this may be nicer, but does not allow using musl that easily
+        //.with_collector_endpoint("http://localhost:14268/api/traces")
         .with_service_name("break-gt")
         .with_trace_config(
             opentelemetry::sdk::trace::Config::default().with_sampler(Sampler::AlwaysOn),

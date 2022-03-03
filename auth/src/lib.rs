@@ -1,9 +1,6 @@
-use async_std::io::Cursor;
-use futures_util::AsyncRead;
-use isahc::config::{Configurable, RedirectPolicy};
-use once_cell::sync::Lazy;
 use openidconnect::core::{CoreClient, CoreIdToken, CoreProviderMetadata, CoreResponseType};
-use openidconnect::{AuthenticationFlow, CsrfToken, HttpRequest, HttpResponse, Nonce};
+use openidconnect::reqwest::async_http_client;
+use openidconnect::{AuthenticationFlow, CsrfToken, Nonce};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use tide::http::{Method, Url};
@@ -44,77 +41,11 @@ enum MiddlewareSessionState {
     PostAuth(String),
 }
 
-// Isahc recommends that you create a single client per "area of application"
-// and reuse that client through your code. We have to create a global client
-// instance (instead of putting the client in a struct and then having the
-// `http_client` function be a trait function) because we need to pass the
-// bare `http_client` function to the oauth2-rs crate and we cannot close
-// over `self` when doing that.
-static HTTP_CLIENT: Lazy<isahc::HttpClient> = Lazy::new(|| {
-    isahc::HttpClient::builder()
-        .redirect_policy(RedirectPolicy::None)
-        .build()
-        .expect("Unable to initialize Isahc client.")
-});
-
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum IsahcError {
-    /// Error returned by Isahc crate.
-    #[error("Isahc request failed")]
-    Isahc(#[source] isahc::Error),
-    /// Non-Isahc HTTP error.
-    #[error("HTTP error")]
-    Http(#[source] isahc::http::Error),
-    /// I/O error.
-    #[error("I/O error")]
-    Io(#[source] std::io::Error),
-}
-
-async fn to_bytes<R>(reader: R) -> Result<Vec<u8>, IsahcError>
-where
-    R: AsyncRead + Unpin,
-{
-    // Create a cursor to a vector, which provides the vector with an
-    // AsyncRead trait that appends to the vector.
-    let mut writer = Cursor::new(Vec::new());
-
-    // Asynchronously copy the data from the reader to the buffer.
-    async_std::io::copy(reader, &mut writer)
-        .await
-        .map_err(IsahcError::Io)?;
-
-    // Return the buffer inside of the reader.
-    Ok(writer.into_inner())
-}
-
-async fn http_client(openid_request: HttpRequest) -> Result<HttpResponse, IsahcError> {
-    let mut request_builder = isahc::Request::builder()
-        .method(openid_request.method)
-        .uri(openid_request.url.as_str());
-    for (name, value) in &openid_request.headers {
-        request_builder = request_builder.header(name.as_str(), value.as_bytes());
-    }
-    let request = request_builder
-        .body(openid_request.body)
-        .map_err(IsahcError::Http)?;
-
-    let response = HTTP_CLIENT
-        .send_async(request)
-        .await
-        .map_err(IsahcError::Isahc)?;
-
-    Ok(HttpResponse {
-        status_code: response.status(),
-        headers: response.headers().to_owned(),
-        body: to_bytes(response.into_body()).await?,
-    })
-}
-
 impl OpenIdConnectMiddleware {
     pub async fn new(config: &Config) -> Self {
         // Get the OpenID Connect provider metadata.
         let provider_metadata =
-            CoreProviderMetadata::discover_async(config.issuer_url.clone(), http_client)
+            CoreProviderMetadata::discover_async(config.issuer_url.clone(), async_http_client)
                 .await
                 .expect("Unable to load OpenID Connect provider metadata.");
 

@@ -10,7 +10,7 @@ serde = "1.0.136"
 async-std = "1.10.0"
 tracing = "0.1.31"
 tempfile = "3.3.0"
-shiplift = "0.7.0"
+shiplift = { version = "0.7.0", default-features = false, features = ["chrono", "unix-socket"] }
 futures-util = "0.3.21"
 anyhow = "1.0.55"
 lazy_static = "1.4.0"
