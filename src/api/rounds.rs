@@ -23,7 +23,10 @@ pub struct RedactedMatchResult {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct PlayerMatches(pub Vec<RedactedMatchResult>);
+pub struct PlayerMatches {
+    pub matches: Vec<RedactedMatchResult>,
+    pub round_time: DateTimeUtc,
+}
 
 pub async fn compute_scoreboard(db: &Database) -> anyhow::Result<Scoreboard> {
     let (rounds, time) = db.get_last_rounds_results().await?;
@@ -92,7 +95,10 @@ pub fn compute_matches(
         })
         .collect();
 
-    Ok(PlayerMatches(matches))
+    Ok(PlayerMatches {
+        matches,
+        round_time: scoreboard.datetime,
+    })
 }
 
 pub async fn get_scoreboard(req: Request<State>) -> tide::Result<Body> {
