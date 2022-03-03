@@ -1,3 +1,4 @@
+use crate::api::rounds::{compute_scoreboard, Scoreboard};
 use crate::execution::matchmaker::{make_match_program, run_matched_program, RoundResult};
 use crate::State;
 use futures_util::StreamExt;
@@ -33,7 +34,7 @@ async fn run_one_round(state: &State) -> anyhow::Result<(BTreeMap<String, i32>, 
 
 pub async fn background_round_executor(
     state: &State,
-    //broadcast: async_broadcast::Sender<RoundResult>,
+    score_sender: async_broadcast::Sender<Scoreboard>,
 ) -> anyhow::Result<()> {
     let mut interval = async_std::stream::interval(INTERVAL);
     while (interval.next().await).is_some() {
@@ -50,7 +51,9 @@ pub async fn background_round_executor(
                 info!("Regular round result: {r:?}");
 
                 state.db.add_round_result(&r, strats).await?;
-                //broadcast.broadcast(r);
+                score_sender
+                    .broadcast(compute_scoreboard(&state.db).await?)
+                    .await?;
             }
             Err(err) => error!("An error occurred while running a regular round:\n{err:?}"),
         }

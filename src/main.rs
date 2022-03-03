@@ -4,6 +4,9 @@ use crate::execution::compiler::JavaCompiler;
 use crate::execution::runner::Runner;
 use crate::execution::ExecutionState;
 
+use crate::api::rounds::Scoreboard;
+use async_broadcast::InactiveReceiver;
+use futures_util::StreamExt;
 use shiplift::Docker;
 use std::env;
 use std::sync::Arc;
@@ -21,6 +24,7 @@ mod execution;
 pub struct State {
     db: Database,
     execution: Arc<ExecutionState>,
+    score_receiver: InactiveReceiver<Scoreboard>,
 }
 
 // pub fn result_to_response<T: Into<Response>>(
@@ -50,12 +54,17 @@ async fn main() -> tide::Result<()> {
 
     let docker = Docker::new();
 
+    let (mut score_sender, score_receiver) = async_broadcast::broadcast::<Scoreboard>(1);
+
+    score_sender.set_overflow(true);
+
     let mut app = tide::with_state(State {
         db: Database(db),
         execution: Arc::new(ExecutionState {
             runner: Runner::new(docker.clone()).await.unwrap(),
             compiler: JavaCompiler::new(docker).await.unwrap(),
         }),
+        score_receiver: score_receiver.deactivate(),
     });
 
     app.with(
@@ -103,15 +112,28 @@ async fn main() -> tide::Result<()> {
 
     app.at("/submit")
         .authenticated()
-        .post(|req: tide::Request<State>| async move { api::submissions::submit(req).await });
+        .post(|req| async move { api::submissions::submit(req).await });
 
     app.at("/scoreboard")
-        .get(|req: tide::Request<State>| async move { api::rounds::get_scoreboard(req).await });
+        .get(|req| async move { api::rounds::get_scoreboard(req).await });
+
+    app.at("/events").get(tide::sse::endpoint(
+        |req: tide::Request<State>, sender| async move {
+            let mut receiver = req.state().score_receiver.clone().activate();
+
+            while let Some(scoreboard) = receiver.next().await {
+                sender
+                    .send("scoreboard", serde_json::to_string(&scoreboard)?, None)
+                    .await?;
+            }
+            Ok(())
+        },
+    ));
 
     let state = app.state().clone();
 
     async_std::task::spawn(async move {
-        background_round_executor::background_round_executor(&state)
+        background_round_executor::background_round_executor(&state, score_sender)
             .await
             .unwrap()
     });

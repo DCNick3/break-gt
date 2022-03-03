@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tide::{Body, Request};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Scoreboard {
     pub datetime: DateTimeUtc,
     pub positions: Vec<(String, f64)>,
