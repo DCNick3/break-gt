@@ -2,12 +2,13 @@ use crate::api::rounds::{compute_scoreboard, Scoreboard};
 use crate::execution::matchmaker::{make_match_program, run_matched_program, RoundResult};
 use crate::State;
 use futures_util::StreamExt;
-use log::{error, info};
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
+use tracing::{error, info, instrument};
 
 const INTERVAL: Duration = Duration::from_secs(10);
 
+#[instrument]
 async fn run_one_round(state: &State) -> anyhow::Result<(BTreeMap<String, i32>, RoundResult)> {
     info!("Starting another round!");
 
@@ -32,6 +33,7 @@ async fn run_one_round(state: &State) -> anyhow::Result<(BTreeMap<String, i32>, 
     Ok((user_strats, res))
 }
 
+#[instrument]
 pub async fn background_round_executor(
     state: &State,
     state_sender: async_broadcast::Sender<(RoundResult, Scoreboard)>,

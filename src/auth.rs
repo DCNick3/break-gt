@@ -8,8 +8,10 @@ use openidconnect::{
     RedirectUrl,
 };
 use serde::{Deserialize, Serialize};
-use tide::http::Method;
+use std::fmt::Debug;
+use tide::http::{Method, Url};
 use tide::{Middleware, Next, Redirect, Request, Route, StatusCode};
+use tracing::{debug, instrument};
 
 /// Middleware configuration.
 #[derive(Debug, Deserialize)]
@@ -25,8 +27,11 @@ pub struct Config {
     /// URL to which the OpenID Connect provider will redirect authenticated
     /// requests; must be a URL registered with the provider.
     pub redirect_url: RedirectUrl,
+
+    pub login_landing_url: Url,
 }
 
+#[derive(Debug)]
 pub struct OpenIdConnectMiddleware {
     login_path: String,
     callback_path: String,
@@ -122,14 +127,15 @@ impl OpenIdConnectMiddleware {
         Self {
             login_path: "/login".to_string(),
             callback_path: "/callback".to_string(),
-            login_landing_path: "/".to_string(),
+            login_landing_path: config.login_landing_url.to_string(),
             client,
         }
     }
 
+    #[instrument]
     async fn generate_redirect<State>(&self, mut req: Request<State>) -> tide::Result
     where
-        State: Clone + Send + Sync + 'static,
+        State: Debug + Clone + Send + Sync + 'static,
     {
         let request = self.client.authorize_url(
             AuthenticationFlow::Hybrid(vec![CoreResponseType::IdToken]),
@@ -155,9 +161,10 @@ impl OpenIdConnectMiddleware {
         Ok(Redirect::new(&authorize_url).into())
     }
 
+    #[instrument]
     async fn handle_callback<State>(&self, mut req: Request<State>) -> tide::Result
     where
-        State: Clone + Send + Sync + 'static,
+        State: Debug + Clone + Send + Sync + 'static,
     {
         // Get the middleware state from the session. If this fails then
         // A) the browser got to the callback URL without actually going
@@ -241,8 +248,9 @@ pub(crate) enum OpenIdConnectRequestExtData {
 #[tide::utils::async_trait]
 impl<State> Middleware<State> for OpenIdConnectMiddleware
 where
-    State: Clone + Send + Sync + 'static,
+    State: Debug + Clone + Send + Sync + 'static,
 {
+    #[instrument(name = "OpenIdConnectMiddleware::handle", skip_all)]
     async fn handle(&self, mut req: Request<State>, next: Next<'_, State>) -> tide::Result {
         // Is this URL one of the URLs that we need to intercept as part
         // of the OpenID Connect auth process? If so, apply the appropriate
@@ -265,12 +273,16 @@ where
             // present if the browser has not yet gone through the auth
             // process), then augment the request with the authentication
             // status.
-            match req.session().get(SESSION_KEY) {
+            let session_data = req.session().get(SESSION_KEY);
+
+            debug!("session_data = {:?}", session_data);
+
+            req.set_ext(match session_data {
                 Some(MiddlewareSessionState::PostAuth(user_id)) => {
-                    req.set_ext(OpenIdConnectRequestExtData::Authenticated { user_id })
+                    OpenIdConnectRequestExtData::Authenticated { user_id }
                 }
-                _ => req.set_ext(OpenIdConnectRequestExtData::Unauthenticated {}),
-            };
+                _ => OpenIdConnectRequestExtData::Unauthenticated {},
+            });
 
             // Call the downstream middleware.
             Ok(next.run(req).await)
@@ -382,19 +394,21 @@ pub trait OpenIdConnectRouteExt {
     fn authenticated(&mut self) -> &mut Self;
 }
 
-impl<'a, State: Clone + Send + Sync + 'static> OpenIdConnectRouteExt for Route<'a, State> {
+impl<'a, State: Debug + Clone + Send + Sync + 'static> OpenIdConnectRouteExt for Route<'a, State> {
     fn authenticated(&mut self) -> &mut Self {
         self.with(MustAuthenticateMiddleware {})
     }
 }
 
+#[derive(Debug)]
 struct MustAuthenticateMiddleware;
 
 #[tide::utils::async_trait]
 impl<State> Middleware<State> for MustAuthenticateMiddleware
 where
-    State: Clone + Send + Sync + 'static,
+    State: Debug + Clone + Send + Sync + 'static,
 {
+    #[instrument(name = "MustAuthenticateMiddleware::handle", skip_all)]
     async fn handle(&self, req: Request<State>, next: Next<'_, State>) -> tide::Result {
         // Is the request authenticated? If so, forward the request to
         // the next item in the middleware chain. Otherwise, redirect

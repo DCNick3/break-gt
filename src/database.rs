@@ -6,25 +6,19 @@ use entity::sea_orm::{
 };
 use std::collections::BTreeMap;
 use std::time::SystemTime;
+use tracing::{info, instrument};
 
 use crate::execution::matchmaker::RoundResult;
 use entity::sea_orm::prelude::DateTimeUtc;
 use entity::{round_result, submission};
 use submission::Entity as Submission;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Database(pub DatabaseConnection);
 
-impl Database {}
-
 impl Database {
+    #[instrument]
     pub async fn add_submission(&self, submission: submission::Model) -> anyhow::Result<i32> {
-        log::info!(
-            "Add submission from {}, valid = {}",
-            submission.id,
-            submission.valid
-        );
-
         let mut am = submission.into_active_model();
 
         am.id = ActiveValue::NotSet;
@@ -34,6 +28,7 @@ impl Database {
         Ok(id)
     }
 
+    #[instrument]
     pub async fn get_active_submissions(&self) -> Result<Vec<submission::Model>, anyhow::Error> {
         let mut datetime_q = Submission::find()
             .select_only()
@@ -71,6 +66,7 @@ impl Database {
         Ok(q.all(&self.0).await?)
     }
 
+    #[instrument]
     pub async fn add_round_result(
         &self,
         round_result: &RoundResult,
@@ -94,7 +90,9 @@ impl Database {
         Ok(id)
     }
 
+    #[instrument]
     pub async fn get_last_rounds_results(&self) -> anyhow::Result<(Vec<RoundResult>, DateTimeUtc)> {
+        info!("Getting last rounds results");
         let r = round_result::Entity::find()
             .order_by_desc(round_result::Column::Datetime)
             .limit(5)

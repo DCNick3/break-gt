@@ -4,12 +4,15 @@ use shiplift::rep::Exit;
 use shiplift::tty::TtyChunk;
 use shiplift::{Container, ContainerOptions, Docker, LogsOptions, RmContainerOptions};
 use std::time::Duration;
+use tracing::instrument;
+use tracing::log::trace;
 
+#[instrument(skip(container))]
 async fn start_and_wait_container(
     container: Container<'_>,
     timeout: Duration,
 ) -> Result<(Exit, String, String), anyhow::Error> {
-    log::trace!(
+    trace!(
         "Starting container {} and waiting for its completion",
         container.id()
     );
@@ -44,6 +47,7 @@ async fn start_and_wait_container(
     Ok((res, stdout, stderr))
 }
 
+#[instrument(skip(docker))]
 pub async fn run_container(
     docker: &Docker,
     container_options: &ContainerOptions,

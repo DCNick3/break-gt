@@ -7,12 +7,18 @@ use crate::execution::ExecutionState;
 use crate::api::rounds::Scoreboard;
 use crate::execution::matchmaker::RoundResult;
 use async_broadcast::InactiveReceiver;
-use futures_util::StreamExt;
+use opentelemetry_tide::{MetricsConfig, TideExt};
 use shiplift::Docker;
 use std::env;
 use std::sync::Arc;
+use tide::http::Url;
 use tide::security::{CorsMiddleware, Origin};
 use tide_rustls::TlsListener;
+use tide_tracing::TraceMiddleware;
+use tracing::Subscriber;
+use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::{EnvFilter, Registry};
 
 mod api;
 mod auth;
@@ -21,7 +27,7 @@ mod database;
 mod error;
 mod execution;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct State {
     db: Database,
     execution: Arc<ExecutionState>,
@@ -40,9 +46,40 @@ pub struct State {
 //     }
 // }
 
+pub fn get_subscriber() -> impl Subscriber + Send + Sync {
+    tracing_log::LogTracer::init().unwrap();
+
+    let filter_layer = EnvFilter::try_from_default_env()
+        .or_else(|_| EnvFilter::try_new("info"))
+        .unwrap();
+
+    let fmt_layer = tracing_subscriber::fmt::layer()
+        .pretty()
+        .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE);
+
+    opentelemetry::global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());
+    let tracer = opentelemetry_jaeger::new_pipeline()
+        .with_service_name("break-gt")
+        .install_batch(opentelemetry::runtime::AsyncStd)
+        .expect("pipeline install failure");
+
+    // Create a tracing layer with the configured tracer
+    let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+
+    let registry = Registry::default()
+        .with(filter_layer)
+        .with(telemetry)
+        .with(fmt_layer);
+
+    registry
+}
+
 #[async_std::main]
 async fn main() -> tide::Result<()> {
-    tide::log::with_level(tide::log::LevelFilter::Debug);
+    //tide::log::with_level(tide::log::LevelFilter::Debug);
+
+    tracing::subscriber::set_global_default(get_subscriber())
+        .expect("setting tracing default failed");
 
     dotenv::dotenv().ok();
     let db_url = env::var("DATABASE_URL").expect("DATABASE_URL is not set in .env file");
@@ -72,6 +109,11 @@ async fn main() -> tide::Result<()> {
         }),
         updates_receiver: score_receiver.deactivate(),
     });
+
+    let tracer = opentelemetry::global::tracer("tide-server");
+    app.with_middlewares(tracer, MetricsConfig::default());
+
+    app.with(TraceMiddleware::new());
 
     app.with(
         CorsMiddleware::new()
@@ -110,6 +152,7 @@ async fn main() -> tide::Result<()> {
                     .to_string(),
             )
             .unwrap(),
+            login_landing_url: Url::parse("http://localhost:8080/about").unwrap()
         })
         .await,
     );
@@ -138,56 +181,8 @@ async fn main() -> tide::Result<()> {
     app.at("/scoreboard")
         .get(|req| async move { api::rounds::get_scoreboard(req).await });
 
-    app.at("/events").get(tide::sse::endpoint(
-        |req: tide::Request<State>, sender| async move {
-            let mut receiver = req.state().updates_receiver.clone().activate();
-            let user_id = req.user_id();
-
-            {
-                let scoreboard = api::rounds::compute_scoreboard(&req.state().db).await?;
-                let last_round = req
-                    .state()
-                    .db
-                    .get_last_rounds_results()
-                    .await?
-                    .0
-                    .first()
-                    .cloned()
-                    .unwrap();
-                // send the current state of affairs
-                sender
-                    .send("scoreboard", serde_json::to_string(&scoreboard)?, None)
-                    .await?;
-
-                if let Some(user_id) = &user_id {
-                    let matches_json = serde_json::to_string(&api::rounds::compute_matches(
-                        &last_round,
-                        &scoreboard,
-                        user_id,
-                    )?)?;
-
-                    sender.send("matches", matches_json, None).await?;
-                }
-            }
-
-            while let Some((last_round, scoreboard)) = receiver.next().await {
-                sender
-                    .send("scoreboard", serde_json::to_string(&scoreboard)?, None)
-                    .await?;
-
-                if let Some(user_id) = &user_id {
-                    let matches_json = serde_json::to_string(&api::rounds::compute_matches(
-                        &last_round,
-                        &scoreboard,
-                        user_id,
-                    )?)?;
-
-                    sender.send("matches", matches_json, None).await?;
-                }
-            }
-            Ok(())
-        },
-    ));
+    app.at("/events")
+        .get(tide::sse::endpoint(api::events::process_events));
 
     let state = app.state().clone();
 
@@ -197,15 +192,15 @@ async fn main() -> tide::Result<()> {
             .unwrap()
     });
 
-    // app.listen(
-    //     TlsListener::build()
-    //         .addrs(server_url)
-    //         .cert(std::env::var("TIDE_CERT_PATH").unwrap())
-    //         .key(std::env::var("TIDE_KEY_PATH").unwrap()),
-    // )
-    // .await?;
+    app.listen(
+        TlsListener::build()
+            .addrs(server_url)
+            .cert(std::env::var("TIDE_CERT_PATH").unwrap())
+            .key(std::env::var("TIDE_KEY_PATH").unwrap()),
+    )
+    .await?;
 
-    app.listen(server_url).await?;
+    //app.listen(server_url).await?;
 
     Ok(())
 

@@ -6,6 +6,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use tracing::{info, instrument};
 
 const NAMESPACE: &str = "gametheory.assignment2";
 lazy_static! {
@@ -156,13 +157,14 @@ fn parse_round_result(val: &str) -> Result<RoundResult, anyhow::Error> {
     Ok(res)
 }
 
+#[instrument]
 pub async fn run_matched_program(
     execution_state: Arc<ExecutionState>,
     program: &JavaProgram,
 ) -> Result<RoundResult, anyhow::Error> {
     let program = execution_state.compiler.compile(program).await?;
 
-    println!("Compiled {program:?}");
+    info!("Compiled {program:?}");
 
     let (exit, out, err) = execution_state
         .runner

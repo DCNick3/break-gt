@@ -7,8 +7,9 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tide::{Body, Request};
+use tracing::instrument;
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Scoreboard {
     pub datetime: DateTimeUtc,
     pub positions: Vec<(String, f64)>,
@@ -28,6 +29,7 @@ pub struct PlayerMatches {
     pub round_time: DateTimeUtc,
 }
 
+#[instrument]
 pub async fn compute_scoreboard(db: &Database) -> anyhow::Result<Scoreboard> {
     let (rounds, time) = db.get_last_rounds_results().await?;
 
@@ -66,6 +68,7 @@ pub async fn compute_scoreboard(db: &Database) -> anyhow::Result<Scoreboard> {
     Ok(res)
 }
 
+#[instrument]
 pub fn compute_matches(
     round: &RoundResult,
     scoreboard: &Scoreboard,
@@ -101,12 +104,14 @@ pub fn compute_matches(
     })
 }
 
+#[instrument(skip(req))]
 pub async fn get_scoreboard(req: Request<State>) -> tide::Result<Body> {
     let res = compute_scoreboard(&req.state().db).await?;
 
     Ok(Body::from_json(&res)?)
 }
 
+#[instrument(skip(req))]
 pub async fn get_matches(req: Request<State>) -> tide::Result<Body> {
     let (round, _) = req.state().db.get_last_rounds_results().await?;
     let round = round.first().ok_or(anyhow!("Don't have any rounds yet"))?;

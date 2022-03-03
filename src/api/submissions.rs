@@ -7,9 +7,11 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use tide::log::info;
 use tide::{Body, Request, StatusCode};
+use tracing::instrument;
 
 const UPLOAD_LIMIT: usize = 1024 * 1024;
 
+#[instrument]
 async fn validate_code(
     execution: Arc<ExecutionState>,
     user_id: String,
@@ -95,12 +97,13 @@ async fn validate_code(
     Ok((true, "You pass!".to_string(), Some(player_match_results)))
 }
 
+#[instrument(skip(req))]
 pub async fn submit(mut req: Request<State>) -> tide::Result<Body> {
     let execution_state = req.state().execution.clone();
 
     let user_id = req.user_id().unwrap();
 
-    log::info!("{user_id} uploads something");
+    info!("{user_id} uploads something");
 
     let body = req.body_string().await?;
     if body.len() > UPLOAD_LIMIT {

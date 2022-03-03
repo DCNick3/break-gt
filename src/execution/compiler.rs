@@ -2,13 +2,23 @@ use crate::error::Error::CompilationError;
 use crate::execution::docker_util::run_container;
 use futures_util::stream::StreamExt;
 use shiplift::{ContainerOptions, Docker, PullOptions};
+use std::fmt::{Debug, Formatter};
 use std::path::Path;
 use std::time::Duration;
 use tempfile::{tempdir, TempDir};
+use tracing::{debug, info, instrument, trace};
 
 pub struct JavaCompiler {
     docker: Docker,
     image_name: String,
+}
+
+impl Debug for JavaCompiler {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("JavaCompiler")
+            .field("image_name", &self.image_name)
+            .finish()
+    }
 }
 
 const IMAGE_NAME: &str = "openjdk:8-alpine";
@@ -16,14 +26,14 @@ const TIMEOUT: Duration = Duration::from_secs(5);
 
 impl JavaCompiler {
     pub async fn new(docker: Docker) -> Result<JavaCompiler, anyhow::Error> {
-        log::info!("Gonna pull image {IMAGE_NAME}");
+        info!("Gonna pull image {IMAGE_NAME}");
         {
             let mut stream = docker
                 .images()
                 .pull(&PullOptions::builder().image(IMAGE_NAME).build());
 
             while let Some(pull_result) = stream.next().await {
-                log::debug!("Pull message: {}", pull_result?);
+                debug!("Pull message: {}", pull_result?);
             }
         }
 
@@ -33,13 +43,14 @@ impl JavaCompiler {
         })
     }
 
+    #[instrument]
     pub async fn compile(
         &self,
         program: &JavaProgram,
     ) -> Result<CompiledJavaProgram, anyhow::Error> {
         let dir = tempdir()?;
 
-        log::trace!("Compiling java program in {dir:?}");
+        trace!("Compiling java program in {dir:?}");
 
         let mut java_paths = Vec::new();
 
@@ -70,7 +81,7 @@ impl JavaCompiler {
                 .map(|p| format!("/app/{}.java", p.full_name.replace('.', "/"))),
         );
 
-        log::trace!("Creating compiler container...");
+        trace!("Creating compiler container...");
         let container = ContainerOptions::builder(&self.image_name)
             .volumes(mounts.iter().map(|s| s.as_str()).collect())
             .cmd(cmd.iter().map(|s| s.as_str()).collect())
@@ -84,7 +95,7 @@ impl JavaCompiler {
             return Err(CompilationError(err).into());
         }
 
-        log::trace!("javac succeeded, removing source code");
+        trace!("javac succeeded, removing source code");
         for class in java_paths {
             std::fs::remove_file(class)?
         }
@@ -93,11 +104,13 @@ impl JavaCompiler {
     }
 }
 
+#[derive(Debug)]
 pub struct JavaClass {
     pub full_name: String,
     pub source_code: String,
 }
 
+#[derive(Debug)]
 pub struct JavaProgram(Vec<JavaClass>);
 
 impl JavaProgram {
