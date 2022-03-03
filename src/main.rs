@@ -124,6 +124,9 @@ async fn main() -> tide::Result<()> {
         ))
     });
 
+    app.at("/me")
+        .get(|req| async move { api::auth::get_me(req).await });
+
     app.at("/submit")
         .authenticated()
         .post(|req| async move { api::submissions::submit(req).await });
