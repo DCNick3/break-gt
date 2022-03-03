@@ -1,5 +1,5 @@
-use crate::execution::compiler::CompiledJavaProgram;
-use crate::execution::docker_util::run_container;
+use crate::compiler::CompiledJavaProgram;
+use crate::docker_util::run_container;
 use futures_util::stream::StreamExt;
 use shiplift::rep::Exit;
 use shiplift::{ContainerOptions, Docker, PullOptions};

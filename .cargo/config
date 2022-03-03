@@ -1,0 +1,7 @@
+# This speeds up small changes dramatically.
+# With lld enabled, doing a small change and then
+# recompiling takes 0,789s in total on a project of mine.
+# Without lld, the same change takes 1,842s.
+[target.x86_64-unknown-linux-gnu]
+linker = "/usr/bin/clang"
+rustflags = ["-Clink-arg=-fuse-ld=lld"]

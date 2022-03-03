@@ -3,15 +3,14 @@ use futures_util::AsyncRead;
 use isahc::config::{Configurable, RedirectPolicy};
 use once_cell::sync::Lazy;
 use openidconnect::core::{CoreClient, CoreIdToken, CoreProviderMetadata, CoreResponseType};
-use openidconnect::{
-    AuthenticationFlow, ClientId, CsrfToken, HttpRequest, HttpResponse, IssuerUrl, Nonce,
-    RedirectUrl,
-};
+use openidconnect::{AuthenticationFlow, CsrfToken, HttpRequest, HttpResponse, Nonce};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use tide::http::{Method, Url};
 use tide::{Middleware, Next, Redirect, Request, Route, StatusCode};
 use tracing::{debug, instrument};
+
+pub use openidconnect::{ClientId, IssuerUrl, RedirectUrl};
 
 /// Middleware configuration.
 #[derive(Debug, Deserialize)]
@@ -368,7 +367,7 @@ where
 /// # Example
 ///
 /// ```no_run
-/// use tide_openidconnect::{self, OpenIdConnectRouteExt};
+/// use auth::{self, OpenIdConnectRouteExt};
 /// # type Request = tide::Request<()>;
 /// # async_std::task::block_on(async {
 /// # let mut app = tide::new();

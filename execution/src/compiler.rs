@@ -1,5 +1,5 @@
+use crate::docker_util::run_container;
 use crate::error::Error::CompilationError;
-use crate::execution::docker_util::run_container;
 use futures_util::stream::StreamExt;
 use shiplift::{ContainerOptions, Docker, PullOptions};
 use std::fmt::{Debug, Formatter};

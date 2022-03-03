@@ -1,7 +1,7 @@
-use crate::execution::matchmaker::{match_with_dummy_strats, run_matched_program, PlayerResult};
 use crate::{ExecutionState, OpenIdConnectRequestExt, State};
 use entity::sea_orm::prelude::DateTimeUtc;
 use entity::submission;
+use execution::matchmaker::{match_with_dummy_strats, run_matched_program, PlayerResult};
 use std::fmt::Write;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -23,10 +23,10 @@ async fn validate_code(
 
     let res = match res {
         Ok(res) => res,
-        Err(err) => match err.downcast::<crate::error::Error>() {
+        Err(err) => match err.downcast::<execution::error::Error>() {
             Ok(e) => {
                 return match e {
-                    crate::error::Error::CompilationError(compiler_message) => {
+                    execution::error::Error::CompilationError(compiler_message) => {
                         let mut res = "Compilation failed:\n".to_string();
 
                         if compiler_message.contains("should be declared in a file") {
@@ -37,7 +37,7 @@ async fn validate_code(
 
                         Ok((false, res, None))
                     }
-                    crate::error::Error::FixtureFailure(_, out, err, r) => Ok((
+                    execution::error::Error::FixtureFailure(_, out, err, r) => Ok((
                         false,
                         format!(
                             "Testing fixture failed\n\

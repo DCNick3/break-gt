@@ -1,15 +1,15 @@
-use crate::auth::{OpenIdConnectRequestExt, OpenIdConnectRouteExt};
-use crate::database::Database;
-use crate::execution::compiler::JavaCompiler;
-use crate::execution::runner::Runner;
-use crate::execution::ExecutionState;
-
 use crate::api::rounds::Scoreboard;
-use crate::execution::matchmaker::RoundResult;
+use crate::database::Database;
+use execution::compiler::JavaCompiler;
+use execution::matchmaker::RoundResult;
+use execution::runner::Runner;
+use execution::ExecutionState;
+
 use async_broadcast::InactiveReceiver;
+use auth::{OpenIdConnectRequestExt, OpenIdConnectRouteExt};
+use execution::Docker;
 use opentelemetry::sdk::trace::Sampler;
 use opentelemetry_tide::{MetricsConfig, TideExt};
-use shiplift::Docker;
 use std::env;
 use std::sync::Arc;
 use tide::http::Url;
@@ -23,11 +23,8 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{EnvFilter, Registry};
 
 mod api;
-mod auth;
 mod background_round_executor;
 mod database;
-mod error;
-mod execution;
 mod frontend;
 
 #[derive(Clone, Debug)]
@@ -36,18 +33,6 @@ pub struct State {
     execution: Arc<ExecutionState>,
     updates_receiver: InactiveReceiver<(RoundResult, Scoreboard)>,
 }
-
-// pub fn result_to_response<T: Into<Response>>(
-//     r: Result<T, anyhow::Error>,
-// ) -> Result<Response, tide::Error> {
-//     match r {
-//         Ok(r) => Ok(r.into()),
-//         Err(r) => match r.downcast::<tide::Error>() {
-//             Ok(e) => Err(e),
-//             Err(e) => Err(tide::Error::new(StatusCode::InternalServerError, e)),
-//         },
-//     }
-// }
 
 pub fn get_subscriber() -> impl Subscriber + Send + Sync {
     tracing_log::LogTracer::init().unwrap();
@@ -132,10 +117,12 @@ async fn main() -> tide::Result<()> {
         CorsMiddleware::new()
             .allow_credentials(true)
             .allow_origin(Origin::List(
-                [frontend_url.as_str(), "https://sso.university.innopolis.ru"]
-                    .iter()
-                    .map(|f| f.to_string())
-                    .collect(),
+                [
+                    frontend_url.origin().ascii_serialization(),
+                    "https://sso.university.innopolis.ru".to_string(),
+                ]
+                .into_iter()
+                .collect(),
             )),
     );
 
@@ -150,14 +137,12 @@ async fn main() -> tide::Result<()> {
 
     app.with(
         auth::OpenIdConnectMiddleware::new(&auth::Config {
-            issuer_url: openidconnect::IssuerUrl::new(
+            issuer_url: auth::IssuerUrl::new(
                 "https://sso.university.innopolis.ru/adfs".to_string(),
             )
             .unwrap(),
-            client_id: openidconnect::ClientId::new(
-                "ad288b08-3b91-4c4b-b0bd-30d249e26fdb".to_string(),
-            ),
-            redirecter_url: openidconnect::RedirectUrl::new(format!(
+            client_id: auth::ClientId::new("ad288b08-3b91-4c4b-b0bd-30d249e26fdb".to_string()),
+            redirecter_url: auth::RedirectUrl::new(format!(
                 "https://redirect.baam.duckdns.org/?redirect={}",
                 public_url.join("callback").unwrap()
             ))

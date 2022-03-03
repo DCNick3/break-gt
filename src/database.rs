@@ -8,9 +8,9 @@ use std::collections::BTreeMap;
 use std::time::SystemTime;
 use tracing::{info, instrument};
 
-use crate::execution::matchmaker::RoundResult;
 use entity::sea_orm::prelude::DateTimeUtc;
 use entity::{round_result, submission};
+use execution::matchmaker::RoundResult;
 use submission::Entity as Submission;
 
 #[derive(Clone, Debug)]

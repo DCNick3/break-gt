@@ -1,5 +1,5 @@
+use crate::compiler::JavaProgram;
 use crate::error::Error::FixtureFailure;
-use crate::execution::compiler::JavaProgram;
 use crate::ExecutionState;
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -31,7 +31,7 @@ macro_rules! include_java {
     ($path:literal) => {
         include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/fixture/main/src/gametheory/assignment2/",
+            "/../fixture/main/src/gametheory/assignment2/",
             $path
         ))
     };
