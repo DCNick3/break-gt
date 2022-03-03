@@ -4,11 +4,11 @@ use crate::State;
 use futures_util::StreamExt;
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
-use tracing::{error, info, instrument};
+use tracing::{debug, error, info, instrument};
 
 const INTERVAL: Duration = Duration::from_secs(10);
 
-#[instrument]
+#[instrument(skip_all)]
 async fn run_one_round(state: &State) -> anyhow::Result<(BTreeMap<String, i32>, RoundResult)> {
     info!("Starting another round!");
 
@@ -33,31 +33,43 @@ async fn run_one_round(state: &State) -> anyhow::Result<(BTreeMap<String, i32>, 
     Ok((user_strats, res))
 }
 
-#[instrument]
+#[instrument(skip_all)]
+async fn run_and_submit_one_round(
+    state: &State,
+    state_sender: &async_broadcast::Sender<(RoundResult, Scoreboard)>,
+) -> anyhow::Result<()> {
+    let now = Instant::now();
+    let res = run_one_round(state).await;
+
+    let elapsed_time = now.elapsed();
+
+    info!("Round execution took {elapsed_time:?}");
+
+    match res {
+        Ok((strats, r)) => {
+            info!("Regular round result: {r:?}");
+
+            state.db.add_round_result(&r, strats).await?;
+            let scoreboard = compute_scoreboard(&state.db).await?;
+
+            debug!("broadcasting state...");
+            state_sender.broadcast((r, scoreboard)).await?;
+            debug!("done broadcasting state!");
+        }
+        Err(err) => error!("An error occurred while running a regular round:\n{err:?}"),
+    }
+    Ok(())
+}
+
 pub async fn background_round_executor(
     state: &State,
     state_sender: async_broadcast::Sender<(RoundResult, Scoreboard)>,
 ) -> anyhow::Result<()> {
     let mut interval = async_std::stream::interval(INTERVAL);
     while (interval.next().await).is_some() {
-        let now = Instant::now();
-
-        let res = run_one_round(state).await;
-
-        let elapsed_time = now.elapsed();
-
-        info!("Round execution took {elapsed_time:?}");
-
-        match res {
-            Ok((strats, r)) => {
-                info!("Regular round result: {r:?}");
-
-                state.db.add_round_result(&r, strats).await?;
-                let scoreboard = compute_scoreboard(&state.db).await?;
-
-                state_sender.broadcast((r, scoreboard)).await?;
-            }
-            Err(err) => error!("An error occurred while running a regular round:\n{err:?}"),
+        let err = run_and_submit_one_round(state, &state_sender).await;
+        if let Err(e) = err {
+            error!("{:?}", e)
         }
     }
 

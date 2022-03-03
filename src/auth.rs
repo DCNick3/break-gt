@@ -26,7 +26,7 @@ pub struct Config {
 
     /// URL to which the OpenID Connect provider will redirect authenticated
     /// requests; must be a URL registered with the provider.
-    pub redirect_url: RedirectUrl,
+    pub redirecter_url: RedirectUrl,
 
     pub login_landing_url: Url,
 }
@@ -122,10 +122,10 @@ impl OpenIdConnectMiddleware {
         // Create the OpenID Connect client.
         let client =
             CoreClient::from_provider_metadata(provider_metadata, config.client_id.clone(), None)
-                .set_redirect_uri(config.redirect_url.clone());
+                .set_redirect_uri(config.redirecter_url.clone());
 
         Self {
-            login_path: "/login".to_string(),
+            login_path: "/api/login".to_string(),
             callback_path: "/callback".to_string(),
             login_landing_path: config.login_landing_url.to_string(),
             client,

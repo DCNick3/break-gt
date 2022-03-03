@@ -7,12 +7,14 @@ use crate::execution::ExecutionState;
 use crate::api::rounds::Scoreboard;
 use crate::execution::matchmaker::RoundResult;
 use async_broadcast::InactiveReceiver;
+use opentelemetry::sdk::trace::Sampler;
 use opentelemetry_tide::{MetricsConfig, TideExt};
 use shiplift::Docker;
 use std::env;
 use std::sync::Arc;
 use tide::http::Url;
 use tide::security::{CorsMiddleware, Origin};
+use tide::StatusCode;
 use tide_rustls::TlsListener;
 use tide_tracing::TraceMiddleware;
 use tracing::Subscriber;
@@ -26,6 +28,7 @@ mod background_round_executor;
 mod database;
 mod error;
 mod execution;
+mod frontend;
 
 #[derive(Clone, Debug)]
 pub struct State {
@@ -58,17 +61,21 @@ pub fn get_subscriber() -> impl Subscriber + Send + Sync {
         .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE);
 
     opentelemetry::global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());
-    let tracer = opentelemetry_jaeger::new_pipeline()
+    let jaeger_tracer = opentelemetry_jaeger::new_pipeline()
+        .with_collector_endpoint("http://localhost:14268/api/traces")
         .with_service_name("break-gt")
+        .with_trace_config(
+            opentelemetry::sdk::trace::Config::default().with_sampler(Sampler::AlwaysOn),
+        )
         .install_batch(opentelemetry::runtime::AsyncStd)
-        .expect("pipeline install failure");
+        .expect("jaeger pipeline install failure");
 
     // Create a tracing layer with the configured tracer
-    let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+    let telemetry = tracing_opentelemetry::layer().with_tracer(jaeger_tracer);
 
     let registry = Registry::default()
-        .with(filter_layer)
         .with(telemetry)
+        .with(filter_layer)
         .with(fmt_layer);
 
     registry
@@ -88,12 +95,18 @@ async fn main() -> tide::Result<()> {
     let cookie_secret = env::var("COOKIE_SECRET").expect("COOKIE_SECRET is not set in .env file");
     let server_url = format!("{}:{}", host, port);
 
+    let public_url = env::var("PUBLIC_URL").expect("PUBLIC_URL is not set in .env file");
+    let public_url = Url::parse(&public_url).expect("Couldn't parse the PUBLIC_URL");
+
+    let frontend_url = env::var("FRONTEND_URL").expect("FRONTEND_URL is not set in .env file");
+    let frontend_url = Url::parse(&frontend_url).expect("Couldn't parse the FRONTEND_URL");
+
     let db = entity::sea_orm::Database::connect(db_url).await.unwrap();
 
     let docker = Docker::new();
 
     let (mut score_sender, score_receiver) =
-        async_broadcast::broadcast::<(RoundResult, Scoreboard)>(1);
+        async_broadcast::broadcast::<(RoundResult, Scoreboard)>(4);
 
     score_sender.set_overflow(true);
 
@@ -119,13 +132,10 @@ async fn main() -> tide::Result<()> {
         CorsMiddleware::new()
             .allow_credentials(true)
             .allow_origin(Origin::List(
-                [
-                    "http://localhost:8080",
-                    "https://sso.university.innopolis.ru",
-                ]
-                .iter()
-                .map(|f| f.to_string())
-                .collect(),
+                [frontend_url.as_str(), "https://sso.university.innopolis.ru"]
+                    .iter()
+                    .map(|f| f.to_string())
+                    .collect(),
             )),
     );
 
@@ -147,17 +157,18 @@ async fn main() -> tide::Result<()> {
             client_id: openidconnect::ClientId::new(
                 "ad288b08-3b91-4c4b-b0bd-30d249e26fdb".to_string(),
             ),
-            redirect_url: openidconnect::RedirectUrl::new(
-                "https://redirect.baam.duckdns.org/?redirect=https://ordinary-moose-18.loca.lt/callback"
-                    .to_string(),
-            )
+            redirecter_url: openidconnect::RedirectUrl::new(format!(
+                "https://redirect.baam.duckdns.org/?redirect={}",
+                public_url.join("callback").unwrap()
+            ))
             .unwrap(),
-            login_landing_url: Url::parse("http://localhost:8080/about").unwrap()
+            login_landing_url: frontend_url.join("submission").unwrap(),
         })
         .await,
     );
 
-    app.at("/").get(|req: tide::Request<State>| async move {
+    let mut api = app.at("/api");
+    api.at("/").get(|req: tide::Request<State>| async move {
         let state = req.state();
 
         Ok(format!(
@@ -167,22 +178,23 @@ async fn main() -> tide::Result<()> {
         ))
     });
 
-    app.at("/me")
-        .get(|req| async move { api::auth::get_me(req).await });
+    api.at("/me").get(api::auth::get_me);
 
-    app.at("/submit")
+    api.at("/submit")
         .authenticated()
-        .post(|req| async move { api::submissions::submit(req).await });
+        .post(api::submissions::submit);
 
-    app.at("/matches")
+    api.at("/matches")
         .authenticated()
-        .get(|req| async move { api::rounds::get_matches(req).await });
+        .get(api::rounds::get_matches);
 
-    app.at("/scoreboard")
-        .get(|req| async move { api::rounds::get_scoreboard(req).await });
+    api.at("/scoreboard").get(api::rounds::get_scoreboard);
 
-    app.at("/events")
+    api.at("/events")
         .get(tide::sse::endpoint(api::events::process_events));
+
+    app.at("*").get(frontend::serve_static);
+    app.at("/").get(frontend::serve_static);
 
     let state = app.state().clone();
 

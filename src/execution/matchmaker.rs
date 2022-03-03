@@ -157,7 +157,7 @@ fn parse_round_result(val: &str) -> Result<RoundResult, anyhow::Error> {
     Ok(res)
 }
 
-#[instrument]
+#[instrument(skip_all)]
 pub async fn run_matched_program(
     execution_state: Arc<ExecutionState>,
     program: &JavaProgram,

@@ -62,6 +62,7 @@ impl Runner {
         let container = ContainerOptions::builder(&self.image_name)
             .volumes(mounts.iter().map(|s| s.as_str()).collect())
             .cmd(cmd)
+            .network_mode("none")
             .build();
 
         run_container(&self.docker, &container, TIMEOUT).await

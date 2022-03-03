@@ -2,7 +2,7 @@ use crate::{api, OpenIdConnectRequestExt, RoundResult, Scoreboard, State};
 use futures_util::StreamExt;
 use tracing::instrument;
 
-#[instrument]
+#[instrument(skip(last_round))]
 async fn send_updates(
     user_id: &Option<String>,
     last_round: RoundResult,
@@ -26,6 +26,29 @@ async fn send_updates(
     Ok(())
 }
 
+#[instrument(skip(req, sender))]
+async fn send_first_events(
+    user_id: &Option<String>,
+    req: &tide::Request<State>,
+    sender: &tide::sse::Sender,
+) -> anyhow::Result<()> {
+    let scoreboard = api::rounds::compute_scoreboard(&req.state().db).await?;
+    let last_round = req
+        .state()
+        .db
+        .get_last_rounds_results()
+        .await?
+        .0
+        .first()
+        .cloned()
+        .unwrap();
+    // send the current state of affairs
+
+    send_updates(user_id, last_round, scoreboard, &sender).await?;
+
+    Ok(())
+}
+
 #[instrument(skip(req))]
 pub async fn process_events(
     req: tide::Request<State>,
@@ -34,21 +57,7 @@ pub async fn process_events(
     let mut receiver = req.state().updates_receiver.clone().activate();
     let user_id = req.user_id();
 
-    {
-        let scoreboard = api::rounds::compute_scoreboard(&req.state().db).await?;
-        let last_round = req
-            .state()
-            .db
-            .get_last_rounds_results()
-            .await?
-            .0
-            .first()
-            .cloned()
-            .unwrap();
-        // send the current state of affairs
-
-        send_updates(&user_id, last_round, scoreboard, &sender).await?;
-    }
+    send_first_events(&user_id, &req, &sender).await?;
 
     while let Some((last_round, scoreboard)) = receiver.next().await {
         send_updates(&user_id, last_round, scoreboard, &sender).await?;

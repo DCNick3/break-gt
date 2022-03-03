@@ -43,7 +43,7 @@ impl JavaCompiler {
         })
     }
 
-    #[instrument]
+    #[instrument(skip(program))]
     pub async fn compile(
         &self,
         program: &JavaProgram,
@@ -85,6 +85,7 @@ impl JavaCompiler {
         let container = ContainerOptions::builder(&self.image_name)
             .volumes(mounts.iter().map(|s| s.as_str()).collect())
             .cmd(cmd.iter().map(|s| s.as_str()).collect())
+            .network_mode("none")
             // .attach_stderr(true)
             // .attach_stdout(true)
             .build();
