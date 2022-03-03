@@ -5,6 +5,7 @@ use crate::execution::runner::Runner;
 use crate::execution::ExecutionState;
 
 use crate::api::rounds::Scoreboard;
+use crate::execution::matchmaker::RoundResult;
 use async_broadcast::InactiveReceiver;
 use futures_util::StreamExt;
 use shiplift::Docker;
@@ -24,7 +25,7 @@ mod execution;
 pub struct State {
     db: Database,
     execution: Arc<ExecutionState>,
-    score_receiver: InactiveReceiver<Scoreboard>,
+    updates_receiver: InactiveReceiver<(RoundResult, Scoreboard)>,
 }
 
 // pub fn result_to_response<T: Into<Response>>(
@@ -54,7 +55,8 @@ async fn main() -> tide::Result<()> {
 
     let docker = Docker::new();
 
-    let (mut score_sender, score_receiver) = async_broadcast::broadcast::<Scoreboard>(1);
+    let (mut score_sender, score_receiver) =
+        async_broadcast::broadcast::<(RoundResult, Scoreboard)>(1);
 
     score_sender.set_overflow(true);
 
@@ -68,7 +70,7 @@ async fn main() -> tide::Result<()> {
                 .await
                 .expect("Cannot create compiler"),
         }),
-        score_receiver: score_receiver.deactivate(),
+        updates_receiver: score_receiver.deactivate(),
     });
 
     app.with(
@@ -135,12 +137,50 @@ async fn main() -> tide::Result<()> {
 
     app.at("/events").get(tide::sse::endpoint(
         |req: tide::Request<State>, sender| async move {
-            let mut receiver = req.state().score_receiver.clone().activate();
+            let mut receiver = req.state().updates_receiver.clone().activate();
+            let user_id = req.user_id();
 
-            while let Some(scoreboard) = receiver.next().await {
+            {
+                let scoreboard = api::rounds::compute_scoreboard(&req.state().db).await?;
+                let last_round = req
+                    .state()
+                    .db
+                    .get_last_rounds_results()
+                    .await?
+                    .0
+                    .first()
+                    .cloned()
+                    .unwrap();
+                // send the current state of affairs
                 sender
                     .send("scoreboard", serde_json::to_string(&scoreboard)?, None)
                     .await?;
+
+                if let Some(user_id) = &user_id {
+                    let matches_json = serde_json::to_string(&api::rounds::compute_matches(
+                        &last_round,
+                        &scoreboard,
+                        user_id,
+                    )?)?;
+
+                    sender.send("matches", matches_json, None).await?;
+                }
+            }
+
+            while let Some((last_round, scoreboard)) = receiver.next().await {
+                sender
+                    .send("scoreboard", serde_json::to_string(&scoreboard)?, None)
+                    .await?;
+
+                if let Some(user_id) = &user_id {
+                    let matches_json = serde_json::to_string(&api::rounds::compute_matches(
+                        &last_round,
+                        &scoreboard,
+                        user_id,
+                    )?)?;
+
+                    sender.send("matches", matches_json, None).await?;
+                }
             }
             Ok(())
         },

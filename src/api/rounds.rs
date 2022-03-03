@@ -63,7 +63,7 @@ pub async fn compute_scoreboard(db: &Database) -> anyhow::Result<Scoreboard> {
     Ok(res)
 }
 
-pub async fn compute_matches(
+pub fn compute_matches(
     round: &RoundResult,
     scoreboard: &Scoreboard,
     player_name: &str,
@@ -107,7 +107,7 @@ pub async fn get_matches(req: Request<State>) -> tide::Result<Body> {
 
     let scoreboard = compute_scoreboard(&req.state().db).await?;
 
-    let res = compute_matches(round, &scoreboard, &req.user_id().unwrap()).await?;
+    let res = compute_matches(round, &scoreboard, &req.user_id().unwrap())?;
 
     Ok(Body::from_json(&res)?)
 }

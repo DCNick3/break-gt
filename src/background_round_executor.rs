@@ -34,7 +34,7 @@ async fn run_one_round(state: &State) -> anyhow::Result<(BTreeMap<String, i32>, 
 
 pub async fn background_round_executor(
     state: &State,
-    score_sender: async_broadcast::Sender<Scoreboard>,
+    state_sender: async_broadcast::Sender<(RoundResult, Scoreboard)>,
 ) -> anyhow::Result<()> {
     let mut interval = async_std::stream::interval(INTERVAL);
     while (interval.next().await).is_some() {
@@ -51,9 +51,9 @@ pub async fn background_round_executor(
                 info!("Regular round result: {r:?}");
 
                 state.db.add_round_result(&r, strats).await?;
-                score_sender
-                    .broadcast(compute_scoreboard(&state.db).await?)
-                    .await?;
+                let scoreboard = compute_scoreboard(&state.db).await?;
+
+                state_sender.broadcast((r, scoreboard)).await?;
             }
             Err(err) => error!("An error occurred while running a regular round:\n{err:?}"),
         }
