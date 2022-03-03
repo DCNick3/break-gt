@@ -94,7 +94,7 @@ impl Database {
         Ok(id)
     }
 
-    pub async fn get_last_rounds_result(&self) -> anyhow::Result<(Vec<RoundResult>, DateTimeUtc)> {
+    pub async fn get_last_rounds_results(&self) -> anyhow::Result<(Vec<RoundResult>, DateTimeUtc)> {
         let r = round_result::Entity::find()
             .order_by_desc(round_result::Column::Datetime)
             .limit(5)

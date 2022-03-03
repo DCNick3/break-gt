@@ -10,7 +10,7 @@ use futures_util::StreamExt;
 use shiplift::Docker;
 use std::env;
 use std::sync::Arc;
-use tide::security::CorsMiddleware;
+use tide::security::{CorsMiddleware, Origin};
 use tide_rustls::TlsListener;
 
 mod api;
@@ -61,8 +61,12 @@ async fn main() -> tide::Result<()> {
     let mut app = tide::with_state(State {
         db: Database(db),
         execution: Arc::new(ExecutionState {
-            runner: Runner::new(docker.clone()).await.unwrap(),
-            compiler: JavaCompiler::new(docker).await.unwrap(),
+            runner: Runner::new(docker.clone())
+                .await
+                .expect("Cannot create runner"),
+            compiler: JavaCompiler::new(docker)
+                .await
+                .expect("Cannot create compiler"),
         }),
         score_receiver: score_receiver.deactivate(),
     });
@@ -70,7 +74,15 @@ async fn main() -> tide::Result<()> {
     app.with(
         CorsMiddleware::new()
             .allow_credentials(true)
-            .allow_origin("http://localhost:8080"),
+            .allow_origin(Origin::List(
+                [
+                    "http://localhost:8080",
+                    "https://sso.university.innopolis.ru",
+                ]
+                .iter()
+                .map(|f| f.to_string())
+                .collect(),
+            )),
     );
 
     app.with(
@@ -92,7 +104,7 @@ async fn main() -> tide::Result<()> {
                 "ad288b08-3b91-4c4b-b0bd-30d249e26fdb".to_string(),
             ),
             redirect_url: openidconnect::RedirectUrl::new(
-                "https://redirect.baam.duckdns.org/?redirect=https://2a0c7e13d4a82a.lhrtunnel.link/callback"
+                "https://redirect.baam.duckdns.org/?redirect=https://ordinary-moose-18.loca.lt/callback"
                     .to_string(),
             )
             .unwrap(),
@@ -113,6 +125,10 @@ async fn main() -> tide::Result<()> {
     app.at("/submit")
         .authenticated()
         .post(|req| async move { api::submissions::submit(req).await });
+
+    app.at("/matches")
+        .authenticated()
+        .get(|req| async move { api::rounds::get_matches(req).await });
 
     app.at("/scoreboard")
         .get(|req| async move { api::rounds::get_scoreboard(req).await });
