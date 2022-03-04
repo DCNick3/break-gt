@@ -3,7 +3,9 @@ use frontend_bundle::STATIC_DIST_DIR;
 use tide::http::Mime;
 use tide::log::info;
 use tide::{Body, Request};
+use tracing::instrument;
 
+#[instrument(skip(req))]
 pub async fn serve_static(req: Request<State>) -> tide::Result {
     let path = &req.url().path()[1..]; // strip the leading /
     let f = STATIC_DIST_DIR.get_file(path).unwrap_or_else(|| {

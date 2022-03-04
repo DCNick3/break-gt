@@ -1,3 +1,4 @@
+pub use sea_schema::migration::migrator::MigratorTrait;
 pub use sea_schema::migration::*;
 
 mod m20220101_000001_create_table;

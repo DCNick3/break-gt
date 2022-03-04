@@ -1,13 +1,15 @@
 use crate::api::rounds::Scoreboard;
 use crate::database::Database;
+
+use crate::reverse_proxy_middleware::ReverseProxyMiddleware;
+use async_broadcast::InactiveReceiver;
+use auth::{OpenIdConnectRequestExt, OpenIdConnectRouteExt};
 use execution::compiler::JavaCompiler;
 use execution::matchmaker::RoundResult;
 use execution::runner::Runner;
-use execution::ExecutionState;
-
-use async_broadcast::InactiveReceiver;
-use auth::{OpenIdConnectRequestExt, OpenIdConnectRouteExt};
 use execution::Docker;
+use execution::ExecutionState;
+use migration::MigratorTrait;
 use opentelemetry::sdk::trace::Sampler;
 use opentelemetry_tide::{MetricsConfig, TideExt};
 use std::env;
@@ -17,7 +19,7 @@ use tide::security::{CorsMiddleware, Origin};
 use tide::StatusCode;
 use tide_rustls::TlsListener;
 use tide_tracing::TraceMiddleware;
-use tracing::Subscriber;
+use tracing::{info, Subscriber};
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{EnvFilter, Registry};
@@ -26,6 +28,7 @@ mod api;
 mod background_round_executor;
 mod database;
 mod frontend;
+mod reverse_proxy_middleware;
 
 #[derive(Clone, Debug)]
 pub struct State {
@@ -70,11 +73,11 @@ pub fn get_subscriber() -> impl Subscriber + Send + Sync {
 #[async_std::main]
 async fn main() -> tide::Result<()> {
     //tide::log::with_level(tide::log::LevelFilter::Debug);
+    dotenv::dotenv().ok();
 
     tracing::subscriber::set_global_default(get_subscriber())
         .expect("setting tracing default failed");
 
-    dotenv::dotenv().ok();
     let db_url = env::var("DATABASE_URL").expect("DATABASE_URL is not set in .env file");
     let cookie_secret = env::var("COOKIE_SECRET").expect("COOKIE_SECRET is not set in .env file");
 
@@ -87,7 +90,18 @@ async fn main() -> tide::Result<()> {
     let frontend_url = env::var("FRONTEND_URL").expect("FRONTEND_URL is not set in .env file");
     let frontend_url = Url::parse(&frontend_url).expect("Couldn't parse the FRONTEND_URL");
 
+    let auto_migrate = env::var("AUTO_MIGRATE").expect("AUTO_MIGRATE is not set in .env file");
+    let auto_migrate: bool = auto_migrate
+        .parse()
+        .expect("Cannot parse AUTO_MIGRATE as bool");
+
     let db = entity::sea_orm::Database::connect(db_url).await.unwrap();
+
+    if auto_migrate {
+        migration::Migrator::up(&db, None)
+            .await
+            .expect("Migration failed");
+    }
 
     let docker = Docker::new();
 
@@ -110,6 +124,9 @@ async fn main() -> tide::Result<()> {
     });
 
     let tracer = opentelemetry::global::tracer("tide-server");
+
+    app.with(ReverseProxyMiddleware {});
+
     app.with_middlewares(tracer, MetricsConfig::default());
 
     app.with(TraceMiddleware::new());
@@ -197,6 +214,10 @@ async fn main() -> tide::Result<()> {
             .port_or_known_default()
             .expect("Could not determine the port from LISTEN_URL")
     );
+
+    info!("Will start listening on {}", listen_url);
+    info!("Public Url is {}", public_url);
+    info!("Frontend Url is {}", frontend_url);
 
     match listen_url.scheme() {
         "https" => {
