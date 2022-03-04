@@ -1,7 +1,7 @@
 use crate::{Database, OpenIdConnectRequestExt, State};
 use anyhow::anyhow;
 use average::{Estimate, Mean};
-use entity::sea_orm::prelude::DateTimeUtc;
+use entity::sea_orm::prelude::{DateTime, DateTimeUtc};
 use execution::matchmaker::RoundResult;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -13,6 +13,15 @@ use tracing::instrument;
 pub struct Scoreboard {
     pub datetime: DateTimeUtc,
     pub positions: Vec<(String, f64)>,
+}
+
+impl Default for Scoreboard {
+    fn default() -> Self {
+        Scoreboard {
+            positions: Default::default(),
+            datetime: DateTimeUtc::from_utc(DateTime::from_timestamp(0, 0), chrono::Utc),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

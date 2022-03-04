@@ -16,10 +16,11 @@ serde = "1.0.136"
 dotenv = "0.15.0"
 anyhow = "1.0.55"
 serde_qs = "0.8.5"
-async-broadcast = "0.4.0"
+futures-signals = "0.3.24"
 itertools = "0.10.3"
 average = "0.13.1"
 async-trait = "0.1.52"
+chrono = "0.4.19"
 
 opentelemetry-jaeger = { version = "0.16.0", features = [ "rt-async-std" ] }
 opentelemetry = { version = "0.17.0", features = [ "rt-async-std"] }

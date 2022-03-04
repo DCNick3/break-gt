@@ -2,13 +2,13 @@ use crate::api::rounds::Scoreboard;
 use crate::database::Database;
 
 use crate::reverse_proxy_middleware::ReverseProxyMiddleware;
-use async_broadcast::InactiveReceiver;
 use auth::{OpenIdConnectRequestExt, OpenIdConnectRouteExt};
 use execution::compiler::JavaCompiler;
 use execution::matchmaker::RoundResult;
 use execution::runner::Runner;
 use execution::Docker;
 use execution::ExecutionState;
+use futures_signals::signal::Mutable;
 use migration::MigratorTrait;
 use opentelemetry::sdk::trace::Sampler;
 use opentelemetry_tide::{MetricsConfig, TideExt};
@@ -34,7 +34,7 @@ mod reverse_proxy_middleware;
 pub struct State {
     db: Database,
     execution: Arc<ExecutionState>,
-    updates_receiver: InactiveReceiver<(RoundResult, Scoreboard)>,
+    scoreboard_signal: Arc<Mutable<(RoundResult, Scoreboard)>>,
 }
 
 pub fn get_subscriber() -> impl Subscriber + Send + Sync {
@@ -105,10 +105,9 @@ async fn main() -> tide::Result<()> {
 
     let docker = Docker::new();
 
-    let (mut score_sender, score_receiver) =
-        async_broadcast::broadcast::<(RoundResult, Scoreboard)>(4);
-
-    score_sender.set_overflow(true);
+    let scoreboard_signal =
+        futures_signals::signal::Mutable::<(RoundResult, Scoreboard)>::new(Default::default());
+    let scoreboard_signal = Arc::new(scoreboard_signal);
 
     let mut app = tide::with_state(State {
         db: Database(db),
@@ -120,7 +119,7 @@ async fn main() -> tide::Result<()> {
                 .await
                 .expect("Cannot create compiler"),
         }),
-        updates_receiver: score_receiver.deactivate(),
+        scoreboard_signal: scoreboard_signal.clone(),
     });
 
     let tracer = opentelemetry::global::tracer("tide-server");
@@ -202,7 +201,7 @@ async fn main() -> tide::Result<()> {
     let state = app.state().clone();
 
     async_std::task::spawn(async move {
-        background_round_executor::background_round_executor(&state, score_sender)
+        background_round_executor::background_round_executor(&state, scoreboard_signal)
             .await
             .unwrap()
     });

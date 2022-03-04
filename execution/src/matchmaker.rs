@@ -88,7 +88,7 @@ pub fn match_with_dummy_strats(id: String, code: String) -> Result<JavaProgram, 
     ]))
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct RoundResult(pub Vec<MatchResult>);
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MatchResult {
