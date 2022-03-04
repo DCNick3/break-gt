@@ -1,7 +1,8 @@
 use crate::api::rounds::Scoreboard;
+use crate::cors::{CorsMiddleware, Origin};
 use crate::database::Database;
-
 use crate::reverse_proxy_middleware::ReverseProxyMiddleware;
+
 use auth::{OpenIdConnectRequestExt, OpenIdConnectRouteExt};
 use execution::compiler::JavaCompiler;
 use execution::matchmaker::RoundResult;
@@ -15,7 +16,6 @@ use opentelemetry_tide::{MetricsConfig, TideExt};
 use std::env;
 use std::sync::Arc;
 use tide::http::Url;
-use tide::security::{CorsMiddleware, Origin};
 use tide::StatusCode;
 use tide_rustls::TlsListener;
 use tide_tracing::TraceMiddleware;
@@ -26,6 +26,7 @@ use tracing_subscriber::{EnvFilter, Registry};
 
 mod api;
 mod background_round_executor;
+mod cors;
 mod database;
 mod frontend;
 mod reverse_proxy_middleware;
@@ -135,6 +136,7 @@ async fn main() -> tide::Result<()> {
             .allow_credentials(true)
             .allow_origin(Origin::List(
                 [
+                    "null".to_string(),
                     frontend_url.origin().ascii_serialization(),
                     "https://sso.university.innopolis.ru".to_string(),
                 ]
