@@ -5,7 +5,7 @@ import "./index.css";
 import VueSSE from "vue-sse";
 import axios from "axios";
 
-axios.defaults.baseURL = "/api/";
+axios.defaults.baseURL = "http://localhost:8081/";
 
 createApp(App)
   .use(VueSSE, {

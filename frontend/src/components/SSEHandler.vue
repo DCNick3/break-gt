@@ -3,14 +3,14 @@
 </template>
 
 <script>
-import { Scoreboard, Matches } from "@/store.js";
+import { Scoreboard, Matches, last_event_recieved_time } from "@/store.js";
 import axios from "axios";
 let sseClient;
 
 export default {
   name: "SSEHandler",
   data() {
-    return { Scoreboard, Matches };
+    return { Scoreboard, Matches, last_event_recieved_time };
   },
   async mounted() {
     sseClient = this.$sse.create({
@@ -44,9 +44,11 @@ export default {
   },
   methods: {
     handleScoreboard(ScoreboardMessage) {
+      this.last_event_recieved_time.data = Date.now();
       this.Scoreboard.data = ScoreboardMessage;
     },
     handleMatches(MatchesMessage) {
+      this.last_event_recieved_time.data = Date.now();
       this.Matches.data = MatchesMessage;
     },
     handleMessage(message, lastEventId) {
