@@ -30,7 +30,7 @@
         class="flex flex-row justify-center w-screen text-green-500 pl-5 md:pl-10 sm:text-base md:text-xl lg:text-2xl"
         v-if="success"
       >
-        <div>It worked! Wait ~30 seconds for the results.</div>
+        <div>It worked! Wait a bit for the results.</div>
       </div>
       <div
         class="flex flex-col justify-center text-rose-500 sm:text-base md:text-xl lg:text-2xl"
