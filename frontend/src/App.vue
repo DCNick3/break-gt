@@ -64,6 +64,6 @@ export default {
 
 <style>
 .router-link-exact-active {
-  @apply text-emerald-500;
+  @apply text-slate-900;
 }
 </style>
