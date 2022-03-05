@@ -11,6 +11,7 @@ createApp(App)
   .use(VueSSE, {
     format: "json",
     polyfill: true,
+    forcePolyfill: true,
     url: "/my-events-server",
     withCredentials: true,
   })

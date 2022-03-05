@@ -153,7 +153,7 @@ async fn main() -> tide::Result<()> {
             cookie_secret.as_bytes(),
         )
         .with_same_site_policy(tide::http::cookies::SameSite::None)
-        .with_session_ttl(None),
+        .with_session_ttl(Some(chrono::Duration::days(365).to_std().unwrap())),
     );
 
     app.with(
