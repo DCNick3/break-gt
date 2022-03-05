@@ -1,11 +1,10 @@
 use crate::{Database, OpenIdConnectRequestExt, State};
-use anyhow::anyhow;
 use average::{Estimate, Mean};
 use entity::sea_orm::prelude::{DateTime, DateTimeUtc};
-use execution::matchmaker::RoundResult;
+use execution::matchmaker::{PlayerResult, RoundResult};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use tide::{Body, Request};
 use tracing::instrument;
 
@@ -83,13 +82,15 @@ pub async fn compute_scoreboard(db: &Database) -> anyhow::Result<Scoreboard> {
 }
 
 pub fn compute_matches(
-    round: &RoundResult,
+    round: &[RoundResult],
     scoreboard: &Scoreboard,
     player_name: &str,
 ) -> anyhow::Result<PlayerMatches> {
-    let matches = round
-        .0
+    let mut matches_by_players: BTreeMap<_, Vec<(PlayerResult, PlayerResult)>> = BTreeMap::new();
+
+    for r in round
         .iter()
+        .flat_map(|f| f.0.iter())
         .flat_map(|f| {
             [
                 (f.player1.clone(), f.player2.clone()),
@@ -97,17 +98,49 @@ pub fn compute_matches(
             ]
         })
         .filter(|f| f.0.player_name == player_name)
-        .map(|f| RedactedMatchResult {
-            opponent_result: f.1.outcome.map(round_score),
-            your_result: f.0.outcome.map(round_score),
-            opponent_scoreboard_score: scoreboard
-                .positions
-                .iter()
-                .filter(|p| p.0 == f.1.player_name)
-                .exactly_one()
-                .unwrap()
-                .1,
-            opponent_name: f.1.player_name,
+    {
+        matches_by_players
+            .entry(r.1.player_name.clone())
+            .or_insert_with(|| Vec::new())
+            .push(r);
+    }
+
+    let matches = matches_by_players
+        .into_iter()
+        .map(|(opponent_name, matches)| {
+            let (us, them) = matches.into_iter().fold(
+                (Ok(Mean::new()), Ok(Mean::new())),
+                |(us_mean, them_mean), (us, them)| {
+                    let us_mean = us_mean.and_then(|mut m| {
+                        m.add(us.outcome?);
+                        Ok(m)
+                    });
+                    let them_mean = them_mean.and_then(|mut m| {
+                        m.add(them.outcome?);
+                        Ok(m)
+                    });
+
+                    (us_mean, them_mean)
+                },
+            );
+
+            let us = us.map(|f| f.mean());
+            let them = them.map(|f| f.mean());
+
+            let res = RedactedMatchResult {
+                your_result: us,
+                opponent_result: them,
+                opponent_name: opponent_name.clone(),
+                opponent_scoreboard_score: scoreboard
+                    .positions
+                    .iter()
+                    .filter(|p| p.0 == opponent_name.as_str())
+                    .exactly_one()
+                    .unwrap()
+                    .1,
+            };
+
+            res
         })
         .sorted_by(|a, b| {
             // sort from top score to lower, then by name
@@ -133,12 +166,11 @@ pub async fn get_scoreboard(req: Request<State>) -> tide::Result<Body> {
 
 #[instrument(skip(req))]
 pub async fn get_matches(req: Request<State>) -> tide::Result<Body> {
-    let (round, _) = req.state().db.get_last_rounds_results().await?;
-    let round = round.first().ok_or(anyhow!("Don't have any rounds yet"))?;
+    let (rounds, _) = req.state().db.get_last_rounds_results().await?;
 
     let scoreboard = compute_scoreboard(&req.state().db).await?;
 
-    let res = compute_matches(round, &scoreboard, &req.user_id().unwrap())?;
+    let res = compute_matches(&rounds, &scoreboard, &req.user_id().unwrap())?;
 
     Body::from_json(&res)
 }

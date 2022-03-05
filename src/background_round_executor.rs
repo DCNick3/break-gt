@@ -38,7 +38,7 @@ async fn run_one_round(state: &State) -> anyhow::Result<(BTreeMap<String, i32>, 
 #[instrument(skip_all)]
 async fn run_and_submit_one_round(
     state: &State,
-    state_sender: &Arc<Mutable<(RoundResult, Scoreboard)>>,
+    state_sender: &Arc<Mutable<Arc<(Vec<RoundResult>, Scoreboard)>>>,
 ) -> anyhow::Result<()> {
     let now = Instant::now();
     let res = run_one_round(state).await;
@@ -54,8 +54,10 @@ async fn run_and_submit_one_round(
             state.db.add_round_result(&r, strats).await?;
             let scoreboard = compute_scoreboard(&state.db).await?;
 
+            let (last_rounds, _) = state.db.get_last_rounds_results().await?;
+
             debug!("broadcasting state...");
-            state_sender.set((r, scoreboard));
+            state_sender.set(Arc::new((last_rounds, scoreboard)));
             debug!("done broadcasting state!");
         }
         Err(err) => error!("An error occurred while running a regular round:\n{err:?}"),
@@ -65,7 +67,7 @@ async fn run_and_submit_one_round(
 
 pub async fn background_round_executor(
     state: &State,
-    state_sender: Arc<Mutable<(RoundResult, Scoreboard)>>,
+    state_sender: Arc<Mutable<Arc<(Vec<RoundResult>, Scoreboard)>>>,
 ) -> anyhow::Result<()> {
     let mut interval = async_std::stream::interval(INTERVAL);
     while (interval.next().await).is_some() {

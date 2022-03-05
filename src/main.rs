@@ -35,7 +35,7 @@ mod reverse_proxy_middleware;
 pub struct State {
     db: Database,
     execution: Arc<ExecutionState>,
-    scoreboard_signal: Arc<Mutable<(RoundResult, Scoreboard)>>,
+    scoreboard_signal: Arc<Mutable<Arc<(Vec<RoundResult>, Scoreboard)>>>,
 }
 
 pub fn get_subscriber() -> impl Subscriber + Send + Sync {
@@ -107,7 +107,9 @@ async fn main() -> tide::Result<()> {
     let docker = Docker::new();
 
     let scoreboard_signal =
-        futures_signals::signal::Mutable::<(RoundResult, Scoreboard)>::new(Default::default());
+        futures_signals::signal::Mutable::<Arc<(Vec<RoundResult>, Scoreboard)>>::new(
+            Default::default(),
+        );
     let scoreboard_signal = Arc::new(scoreboard_signal);
 
     let mut app = tide::with_state(State {
