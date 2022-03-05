@@ -51,5 +51,5 @@ export const Matches = reactive({
 });
 
 export const last_event_recieved_time = reactive({
-  data: Date.now(),
+  data: Date.now() - 24 * 60 * 60 * 1000,
 });

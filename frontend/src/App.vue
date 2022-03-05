@@ -57,7 +57,7 @@ export default {
     return {
       store,
       last_event_recieved_time,
-      timeag: Date.now() - 1000,
+      timeag: Date.now() - 24 * 60 * 60 * 1000,
       time_stringy: "1 day",
       interval_id: null,
       time_is_great: false,
