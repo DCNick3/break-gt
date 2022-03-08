@@ -63,6 +63,7 @@ impl Runner {
             .volumes(mounts.iter().map(|s| s.as_str()).collect())
             .cmd(cmd)
             .network_mode("none")
+            .memory(67108864) // 64 MiB
             .build();
 
         run_container(&self.docker, &container, TIMEOUT).await

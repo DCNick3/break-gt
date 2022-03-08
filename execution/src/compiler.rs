@@ -86,6 +86,7 @@ impl JavaCompiler {
             .volumes(mounts.iter().map(|s| s.as_str()).collect())
             .cmd(cmd.iter().map(|s| s.as_str()).collect())
             .network_mode("none")
+            .memory(67108864) // 64 MiB
             // .attach_stderr(true)
             // .attach_stdout(true)
             .build();
