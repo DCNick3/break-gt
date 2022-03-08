@@ -3,6 +3,10 @@ edition = "2021"
 name = "break-gt"
 version = "0.1.0"
 
+[profile.release]
+debug = 1
+lto = "thin"
+
 [dependencies]
 futures-util = "0.3.21"
 async-std = { version = "1.10.0", features = [

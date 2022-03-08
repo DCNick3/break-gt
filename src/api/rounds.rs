@@ -65,7 +65,7 @@ pub async fn compute_scoreboard(db: &Database) -> anyhow::Result<Scoreboard> {
         mean_values
             .entry(res.player_name)
             .or_insert_with(Mean::new)
-            .add(res.outcome.unwrap());
+            .add(res.outcome.unwrap_or(0.0));
     }
 
     let res = Scoreboard {
