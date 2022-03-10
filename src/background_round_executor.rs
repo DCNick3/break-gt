@@ -49,7 +49,7 @@ async fn run_and_submit_one_round(
 
     match res {
         Ok((strats, r)) => {
-            info!("Regular round result: {r:?}");
+            info!("Regular round ended with {} matches", r.0.len());
 
             state.db.add_round_result(&r, strats).await?;
             let scoreboard = compute_scoreboard(&state.db).await?;

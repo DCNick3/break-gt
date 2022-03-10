@@ -66,7 +66,7 @@ impl Database {
         Ok(q.all(&self.0).await?)
     }
 
-    #[instrument]
+    #[instrument(skip(round_result))]
     pub async fn add_round_result(
         &self,
         round_result: &RoundResult,
