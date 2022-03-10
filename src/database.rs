@@ -95,7 +95,7 @@ impl Database {
         info!("Getting last rounds results");
         let r = round_result::Entity::find()
             .order_by_desc(round_result::Column::Datetime)
-            .limit(5)
+            .limit(20)
             .all(&self.0)
             .await?;
 

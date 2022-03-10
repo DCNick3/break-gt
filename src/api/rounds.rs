@@ -161,7 +161,7 @@ pub fn compute_matches(
 pub async fn get_scoreboard(req: Request<State>) -> tide::Result<Body> {
     let res = compute_scoreboard(&req.state().db).await?;
 
-    Ok(Body::from_json(&res)?)
+    Body::from_json(&res)
 }
 
 #[instrument(skip(req))]
