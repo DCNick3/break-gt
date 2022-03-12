@@ -4,8 +4,8 @@ use shiplift::rep::Exit;
 use shiplift::tty::TtyChunk;
 use shiplift::{Container, ContainerOptions, Docker, LogsOptions, RmContainerOptions};
 use std::time::Duration;
-use tracing::instrument;
 use tracing::trace;
+use tracing::{error, instrument};
 
 #[instrument(skip(container))]
 async fn start_and_wait_container(
@@ -23,7 +23,10 @@ async fn start_and_wait_container(
 
     let res = match res {
         Ok(r) => r,
-        Err(_) => return Err(ExecutionTimeout.into()),
+        Err(_) => {
+            error!("Timeout reached! bailing out...");
+            return Err(ExecutionTimeout.into());
+        }
     };
 
     let res = res?;

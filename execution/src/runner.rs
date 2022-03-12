@@ -9,7 +9,7 @@ use std::time::Duration;
 use tracing::{debug, info, instrument, trace};
 
 const IMAGE_NAME: &str = "openjdk:8-alpine";
-const TIMEOUT: Duration = Duration::from_secs(5);
+const TIMEOUT: Duration = Duration::from_secs(10);
 
 pub struct Runner {
     docker: Docker,

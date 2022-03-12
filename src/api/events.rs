@@ -4,7 +4,7 @@ use futures_util::StreamExt;
 use std::ops::Deref;
 use tracing::instrument;
 
-#[instrument(skip(last_round))]
+#[instrument(skip(last_round, scoreboard))]
 async fn send_updates(
     user_id: &Option<String>,
     last_round: &[RoundResult],
