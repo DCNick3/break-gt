@@ -22,7 +22,7 @@ impl Debug for JavaCompiler {
 }
 
 const IMAGE_NAME: &str = "openjdk:8-alpine";
-const TIMEOUT: Duration = Duration::from_secs(15);
+const TIMEOUT: Duration = Duration::from_secs(30);
 
 impl JavaCompiler {
     pub async fn new(docker: Docker) -> Result<JavaCompiler, anyhow::Error> {
