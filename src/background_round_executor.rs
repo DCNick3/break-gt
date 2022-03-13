@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tracing::{debug, error, info, instrument};
 
-const INTERVAL: Duration = Duration::from_secs(30);
+const INTERVAL: Duration = Duration::from_secs(60);
 
 #[instrument(skip_all)]
 async fn run_one_round(state: &State) -> anyhow::Result<(BTreeMap<String, i32>, RoundResult)> {
